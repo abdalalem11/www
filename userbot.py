@@ -4,10 +4,12 @@ import os
 import re
 import random
 import time
-from telethon import TelegramClient, events, Button
+import json
+from datetime import datetime, timedelta
+from telethon import TelegramClient, events, Button, errors
 from telethon.sessions import StringSession
-from telethon.tl.functions.channels import InviteToChannelRequest, JoinChannelRequest
-from telethon.tl.functions.messages import AddChatUserRequest, DeleteMessagesRequest
+from telethon.tl.functions.channels import InviteToChannelRequest, JoinChannelRequest, GetParticipantRequest
+from telethon.tl.functions.messages import AddChatUserRequest, DeleteMessagesRequest, GetHistoryRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.errors import FloodWaitError
 from telethon.tl.types import MessageEntityTextUrl
@@ -69,6 +71,70 @@ CMD_LIST = {
     ".م43": "أوامـر المسابقـات"
 }
 
+# ========== قاموس الأوامر الفرعية لكل قائمة ==========
+SUB_COMMANDS = {
+    ".م1": [
+        ("طرد", "طرد عضو من المجموعة"),
+        ("كتم", "كتم عضو مؤقتاً"),
+        ("رفع مشرف", "ترقية عضو لمشرف"),
+        ("تنزيل مشرف", "إلغاء صلاحيات المشرف"),
+        ("حظر", "حظر عضو نهائياً"),
+        ("الغاء حظر", "إلغاء حظر عضو"),
+        ("تثبيت", "تثبيت رسالة"),
+        ("الغاء تثبيت", "إلغاء تثبيت الرسالة"),
+        ("تنظيف", "حذف رسائل محددة"),
+        ("تعديل", "تعديل رسالة مرسلة")
+    ],
+    ".م2": [
+        ("حصان", "لعبة الحصان (تخمين)"),
+        ("سؤال", "سؤال عشوائي"),
+        ("نرد", "رمي النرد"),
+        ("تخمين", "لعبة تخمين الرقم"),
+        ("تويت", "تغريدة عشوائية"),
+        ("نكتة", "نكتة مضحكة")
+    ],
+    ".م7": [
+        ("ترجم", "ترجمة النص"),
+        ("ذكي", "سؤال الذكاء الاصطناعي"),
+        ("ملخص", "تلخيص النص"),
+        ("تحليل", "تحليل رسالة")
+    ],
+    ".م9": [
+        ("تحميل", "تحميل من رابط"),
+        ("فيديو", "تحميل فيديو"),
+        ("صورة", "تحميل صورة"),
+        ("موسيقى", "تحميل موسيقى")
+    ],
+    ".م11": [
+        ("همس", "إرسال همس لشخص"),
+        ("رسالة سرية", "إرسال رسالة سرية")
+    ],
+    ".م23": [
+        ("تاغ عام", "تاغ جميع الأعضاء"),
+        ("تاغ خاص", "تاغ مع نص مخصص"),
+        ("منشن", "منشن مع نص")
+    ],
+    ".م30": [
+        ("استوري", "تحميل استوري شخص"),
+        ("استوري قناة", "تحميل استوري قناة")
+    ],
+    ".م31": [
+        ("خط", "تحويل النص لخط مزخرف"),
+        ("عكسي", "عكس النص"),
+        ("كبير", "تكبير النص")
+    ],
+    ".م32": [
+        ("رصيدي", "عرض الرصيد"),
+        ("تحويل", "تحويل نقاط لشخص"),
+        ("هدية", "إرسال هدية لشخص"),
+        ("توب", "ترتيب الأغنياء")
+    ]
+}
+
+# ========== نظام النقاط المؤقت ==========
+user_balances = {}
+user_warnings = {}
+
 # ========== أمر القائمة الرئيسية ==========
 @client.on(events.NewMessage(pattern=r'\.قائمة'))
 async def main_menu(event):
@@ -77,7 +143,7 @@ async def main_menu(event):
     text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - قائمـة الأوامـر 𓆪**
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
 ⎆ مـرحبًــا {name}
-⎆ اضغـط ع الامـر لـ النسـخ التلقائي
+⎆ اضغـط ع الامـر لـ رؤية التفاصيل
 ⎆ ضـع نقطة (.) بداية كل امـر :
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
     
@@ -85,67 +151,130 @@ async def main_menu(event):
     for i in range(1, 44):
         cmd = f".م{i}"
         if cmd in CMD_LIST:
-            # زر ينسخ الأمر تلقائياً عند الضغط
-            buttons.append([Button.inline(f"{cmd} ➥ {CMD_LIST[cmd]}", f"copy_{cmd}")])
+            buttons.append([Button.inline(f"{cmd} ➥ {CMD_LIST[cmd]}", f"show_{cmd}")])
     
     await event.reply(text, buttons=buttons)
 
-# ========== معالج النسخ التلقائي ==========
+# ========== معالج الأزرار ==========
 @client.on(events.CallbackQuery)
 async def callback_handler(event):
     data = event.data.decode()
-    if data.startswith("copy_"):
+    
+    if data.startswith("show_"):
+        cmd = data.replace("show_", "")
+        if cmd in SUB_COMMANDS:
+            text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - {CMD_LIST.get(cmd, '')} 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+            buttons = []
+            for sub_cmd, desc in SUB_COMMANDS[cmd]:
+                buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+            buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+            await event.edit(text, buttons=buttons)
+        else:
+            await event.answer("❌ لا توجد أوامر فرعية لهذه القائمة")
+    
+    elif data.startswith("copy_"):
         cmd = data.replace("copy_", "")
-        # نسخ الأمر تلقائياً وإظهار إشعار
         await event.answer(f"✅ تم نسخ الأمر: {cmd}", alert=False)
-        # إرسال الأمر في مربع الكتابة (نسخ تلقائي)
-        await event.edit(f"**الأمر:** `{cmd}`\n**الوصف:** {CMD_LIST.get(cmd, '')}\n\n✅ تم النسخ، أرسل الأمر الآن")
+        await event.edit(f"**الأمر:** `.{cmd}`\n\n✅ تم النسخ، أرسل الأمر الآن")
+    
     elif data == "menu":
         await main_menu(event)
 
-# ========== أمر .م1 (الإدارة) ==========
+# ========== قوائم الأوامر الرئيسية ==========
 @client.on(events.NewMessage(pattern=r'\.م1'))
-async def admin_commands(event):
-    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الإدارة والكروبـات 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **.طرد** ➥ طرد عضو من المجموعة
-⎆ **.كتم** ➥ كتم عضو مؤقتاً
-⎆ **.رفع مشرف** ➥ ترقية عضو لمشرف
-⎆ **.تنزيل مشرف** ➥ إلغاء صلاحيات المشرف
-⎆ **.حظر** ➥ حظر عضو نهائياً
-⎆ **.الغاء حظر** ➥ إلغاء حظر عضو
-⎆ **.تثبيت** ➥ تثبيت رسالة
-⎆ **.الغاء تثبيت** ➥ إلغاء تثبيت الرسالة
-⎆ **.تنظيف** ➥ حذف رسائل محددة
-⎆ **.تعديل** ➥ تعديل رسالة مرسلة
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩 - قنـاة السـورس 𓆪
-@SSSTlF"""
-    await event.reply(text, buttons=[
-        [Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]
-    ])
+async def admin_menu(event):
+    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الإدارة والكروبـات 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+    buttons = []
+    for sub_cmd, desc in SUB_COMMANDS[".م1"]:
+        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+    await event.reply(text, buttons=buttons)
 
-# ========== أمر .طرد ==========
+@client.on(events.NewMessage(pattern=r'\.م2'))
+async def games_menu(event):
+    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الألعـاب والترفيـه 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+    buttons = []
+    for sub_cmd, desc in SUB_COMMANDS[".م2"]:
+        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+    await event.reply(text, buttons=buttons)
+
+@client.on(events.NewMessage(pattern=r'\.م7'))
+async def ai_menu(event):
+    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - الذكـاء الاصطناعـي والذاكـرة 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+    buttons = []
+    for sub_cmd, desc in SUB_COMMANDS[".م7"]:
+        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+    await event.reply(text, buttons=buttons)
+
+@client.on(events.NewMessage(pattern=r'\.م23'))
+async def tag_menu(event):
+    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - التاغ والمنشـن الجماعـي 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+    buttons = []
+    for sub_cmd, desc in SUB_COMMANDS[".م23"]:
+        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+    await event.reply(text, buttons=buttons)
+
+@client.on(events.NewMessage(pattern=r'\.م30'))
+async def story_menu(event):
+    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - تحميـل الاستوريات 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+    buttons = []
+    for sub_cmd, desc in SUB_COMMANDS[".م30"]:
+        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+    await event.reply(text, buttons=buttons)
+
+@client.on(events.NewMessage(pattern=r'\.م31'))
+async def fonts_menu(event):
+    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - الخطـوط والأنمـاط التلقائيـة 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+    buttons = []
+    for sub_cmd, desc in SUB_COMMANDS[".م31"]:
+        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+    await event.reply(text, buttons=buttons)
+
+@client.on(events.NewMessage(pattern=r'\.م32'))
+async def bank_menu(event):
+    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - البنـك وتجميـع النقـاط 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+    buttons = []
+    for sub_cmd, desc in SUB_COMMANDS[".م32"]:
+        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+    await event.reply(text, buttons=buttons)
+
+# ========== أوامر الإدارة (م1) ==========
 @client.on(events.NewMessage(pattern=r'\.طرد (?:@|)([\w]+)'))
 async def kick_user(event):
     try:
         user = await event.client.get_entity(event.pattern_match.group(1))
         await event.client.kick_participant(event.chat_id, user)
         await event.reply(f"✅ تم طرد {user.first_name}")
+    except FloodWaitError as e:
+        await event.reply(f"⏳ انتظر {e.seconds} ثانية ثم حاول")
     except Exception as e:
         await event.reply(f"❌ فشل الطرد: {str(e)}")
 
-# ========== أمر .حظر ==========
 @client.on(events.NewMessage(pattern=r'\.حظر (?:@|)([\w]+)'))
 async def ban_user(event):
     try:
         user = await event.client.get_entity(event.pattern_match.group(1))
         await event.client.ban_participant(event.chat_id, user)
         await event.reply(f"✅ تم حظر {user.first_name}")
+    except FloodWaitError as e:
+        await event.reply(f"⏳ انتظر {e.seconds} ثانية ثم حاول")
     except Exception as e:
         await event.reply(f"❌ فشل الحظر: {str(e)}")
 
-# ========== أمر .الغاء حظر ==========
 @client.on(events.NewMessage(pattern=r'\.الغاء حظر (?:@|)([\w]+)'))
 async def unban_user(event):
     try:
@@ -155,7 +284,43 @@ async def unban_user(event):
     except Exception as e:
         await event.reply(f"❌ فشل إلغاء الحظر: {str(e)}")
 
-# ========== أمر .تثبيت ==========
+@client.on(events.NewMessage(pattern=r'\.رفع مشرف (?:@|)([\w]+)'))
+async def promote_user(event):
+    try:
+        user = await event.client.get_entity(event.pattern_match.group(1))
+        await event.client.edit_admin(event.chat_id, user, is_admin=True)
+        await event.reply(f"✅ تم رفع {user.first_name} مشرف")
+    except Exception as e:
+        await event.reply(f"❌ فشل الرفع: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'\.تنزيل مشرف (?:@|)([\w]+)'))
+async def demote_user(event):
+    try:
+        user = await event.client.get_entity(event.pattern_match.group(1))
+        await event.client.edit_admin(event.chat_id, user, is_admin=False)
+        await event.reply(f"✅ تم تنزيل {user.first_name} من المشرفين")
+    except Exception as e:
+        await event.reply(f"❌ فشل التنزيل: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'\.كتم (?:@|)([\w]+)'))
+async def mute_user(event):
+    try:
+        user = await event.client.get_entity(event.pattern_match.group(1))
+        until_date = datetime.now() + timedelta(hours=24)
+        await event.client.edit_permissions(event.chat_id, user, until_date=until_date, send_messages=False)
+        await event.reply(f"✅ تم كتم {user.first_name} لمدة 24 ساعة")
+    except Exception as e:
+        await event.reply(f"❌ فشل الكتم: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'\.الغاء كتم (?:@|)([\w]+)'))
+async def unmute_user(event):
+    try:
+        user = await event.client.get_entity(event.pattern_match.group(1))
+        await event.client.edit_permissions(event.chat_id, user, send_messages=True)
+        await event.reply(f"✅ تم إلغاء كتم {user.first_name}")
+    except Exception as e:
+        await event.reply(f"❌ فشل إلغاء الكتم: {str(e)}")
+
 @client.on(events.NewMessage(pattern=r'\.تثبيت'))
 async def pin_message(event):
     try:
@@ -168,7 +333,6 @@ async def pin_message(event):
     except Exception as e:
         await event.reply(f"❌ فشل التثبيت: {str(e)}")
 
-# ========== أمر .الغاء تثبيت ==========
 @client.on(events.NewMessage(pattern=r'\.الغاء تثبيت'))
 async def unpin_message(event):
     try:
@@ -177,7 +341,6 @@ async def unpin_message(event):
     except Exception as e:
         await event.reply(f"❌ فشل إلغاء التثبيت: {str(e)}")
 
-# ========== أمر .تنظيف ==========
 @client.on(events.NewMessage(pattern=r'\.تنظيف (\d+)'))
 async def clean_messages(event):
     try:
@@ -192,37 +355,302 @@ async def clean_messages(event):
     except Exception as e:
         await event.reply(f"❌ فشل التنظيف: {str(e)}")
 
-# ========== أمر .م2 (الألعاب) ==========
-@client.on(events.NewMessage(pattern=r'\.م2'))
-async def games_commands(event):
-    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الألعـاب والترفيـه 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **.حصان** ➥ لعبة الحصان (تخمين)
-⎆ **.سؤال** ➥ سؤال عشوائي
-⎆ **.نرد** ➥ رمي النرد
-⎆ **.تخمين** ➥ لعبة تخمين الرقم
-⎆ **.تويت** ➥ تغريدة عشوائية
-⎆ **.نكتة** ➥ نكتة مضحكة
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-    await event.reply(text, buttons=[
-        [Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]
-    ])
+@client.on(events.NewMessage(pattern=r'\.تعديل (.*)'))
+async def edit_message(event):
+    try:
+        text = event.pattern_match.group(1)
+        msg = await event.get_reply_message()
+        if msg:
+            await event.client.edit_message(event.chat_id, msg.id, text)
+            await event.reply("✅ تم تعديل الرسالة")
+        else:
+            await event.reply("❌ قم بالرد على رسالة لتعديلها")
+    except Exception as e:
+        await event.reply(f"❌ فشل التعديل: {str(e)}")
 
-# ========== أمر .نرد ==========
+# ========== أوامر الألعاب (م2) ==========
 @client.on(events.NewMessage(pattern=r'\.نرد'))
 async def dice(event):
     num = random.randint(1, 6)
     await event.reply(f"🎲 نتيجة النرد: **{num}**")
 
-# ========== أمر .نكتة ==========
 @client.on(events.NewMessage(pattern=r'\.نكتة'))
 async def joke(event):
     jokes = [
         "لماذا لم يتزوج الحاسوب؟ لأنه كان يبحث عن شريحة متوافقة 😂",
         "ماذا قال الجوال للحاسوب؟ لا تنسَ أن تشحن نفسك! 🔋",
         "لماذا ذهب المبرمج إلى الطبيب؟ لأنه كان يعاني من `SyntaxError` في حياته 😅",
+        "ما الفرق بين المبرمج والطبيب؟ المبرمج يعالج الأخطاء والطبيب يعالج المرضى 🤓",
     ]
     await event.reply(random.choice(jokes))
+
+@client.on(events.NewMessage(pattern=r'\.تويت'))
+async def tweet(event):
+    tweets = [
+        "النجاح ليس نهائياً، والفشل ليس قاتلاً: الشجاعة للاستمرار هي ما يهم.",
+        "كن التغيير الذي تريد رؤيته في العالم.",
+        "الحياة ليست عن إيجاد الذات، الحياة عن خلق الذات.",
+        "المستقبل لأولئك الذين يؤمنون بجمال أحلامهم.",
+    ]
+    await event.reply(f"🐦 {random.choice(tweets)}")
+
+@client.on(events.NewMessage(pattern=r'\.سؤال'))
+async def random_question(event):
+    questions = [
+        "ما هو الشيء الذي كلما زاد نقص؟",
+        "ما هو الشيء الذي له عين ولا يرى؟",
+        "ما هو الشيء الذي يمشي بلا رجلين؟",
+        "ما هو الشيء الذي تأكله ولا تستطيع أن تأكله؟",
+    ]
+    await event.reply(f"❓ {random.choice(questions)}")
+
+@client.on(events.NewMessage(pattern=r'\.تخمين (\d+)'))
+async def guess_number(event):
+    try:
+        guess = int(event.pattern_match.group(1))
+        number = random.randint(1, 100)
+        if guess == number:
+            await event.reply(f"🎯 صحيح! الرقم هو {number}")
+        elif guess < number:
+            await event.reply(f"📈 الرقم أكبر من {guess}")
+        else:
+            await event.reply(f"📉 الرقم أصغر من {guess}")
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'\.حصان'))
+async def horse_game(event):
+    horses = ["🐎", "🐴", "🏇", "🐏", "🐕"]
+    winner = random.choice(horses)
+    await event.reply(f"🏁 سباق الخيول!\nالفائز: {winner}")
+
+# ========== أوامر الذكاء الاصطناعي (م7) ==========
+@client.on(events.NewMessage(pattern=r'\.ترجم (.*)'))
+async def translate_text(event):
+    text = event.pattern_match.group(1)
+    # محاكاة ترجمة بسيطة
+    await event.reply(f"🌐 الترجمة التقريبية: {text} (هنا ستظهر الترجمة الفعلية عند ربطها بمكتبة ترجمة)")
+
+@client.on(events.NewMessage(pattern=r'\.ذكي (.*)'))
+async def ai_reply(event):
+    question = event.pattern_match.group(1)
+    await event.reply(f"🧠 رد الذكاء الاصطناعي: سؤالك '{question}' مهم جداً، لكنني حالياً في وضع التطوير! 🤖")
+
+@client.on(events.NewMessage(pattern=r'\.ملخص'))
+async def summarize_text(event):
+    msg = await event.get_reply_message()
+    if msg and msg.text:
+        text = msg.text
+        summary = text[:100] + "..." if len(text) > 100 else text
+        await event.reply(f"📝 الملخص: {summary}")
+    else:
+        await event.reply("❌ قم بالرد على نص لتلخيصه")
+
+@client.on(events.NewMessage(pattern=r'\.تحليل'))
+async def analyze_message(event):
+    msg = await event.get_reply_message()
+    if msg:
+        analysis = f"📊 تحليل الرسالة:\n"
+        analysis += f"• الطول: {len(msg.text)} حرف\n"
+        analysis += f"• الكلمات: {len(msg.text.split())} كلمة\n"
+        analysis += f"• التاريخ: {msg.date}\n"
+        await event.reply(analysis)
+    else:
+        await event.reply("❌ قم بالرد على رسالة لتحليلها")
+
+# ========== أوامر التاغ (م23) ==========
+@client.on(events.NewMessage(pattern=r'\.تاغ عام'))
+async def tag_all(event):
+    try:
+        await event.reply("👥 جارٍ تاغ جميع الأعضاء...")
+        participants = await event.client.get_participants(event.chat_id)
+        mentions = "".join([f"@{p.username} " for p in participants if p.username])
+        if mentions:
+            await event.reply(f"👥 تاغ عام:\n{mentions}")
+        else:
+            await event.reply("❌ لا يوجد أعضاء لديهم يوزرات للتاغ")
+    except Exception as e:
+        await event.reply(f"❌ فشل التاغ: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'\.تاغ خاص (.*)'))
+async def tag_special(event):
+    text = event.pattern_match.group(1)
+    try:
+        participants = await event.client.get_participants(event.chat_id)
+        mentions = "".join([f"@{p.username} " for p in participants if p.username][:5])
+        if mentions:
+            await event.reply(f"📢 {text}\n{mentions}")
+        else:
+            await event.reply("❌ لا يوجد أعضاء لديهم يوزرات")
+    except Exception as e:
+        await event.reply(f"❌ فشل التاغ: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'\.منشن (.*)'))
+async def mention_text(event):
+    text = event.pattern_match.group(1)
+    try:
+        participants = await event.client.get_participants(event.chat_id)
+        mentions = "".join([f"[{p.first_name}](tg://user?id={p.id}) " for p in participants][:5])
+        if mentions:
+            await event.reply(f"{text}\n{mentions}", parse_mode='md')
+        else:
+            await event.reply("❌ لا يوجد أعضاء")
+    except Exception as e:
+        await event.reply(f"❌ فشل المنشن: {str(e)}")
+
+# ========== أوامر الخطوط (م31) ==========
+@client.on(events.NewMessage(pattern=r'\.خط (.*)'))
+async def fancy_text(event):
+    text = event.pattern_match.group(1)
+    # تحويل بسيط للنص (محاكاة)
+    fancy = "".join([chr(ord(c) + 0x1D400) if c.isalpha() else c for c in text])
+    await event.reply(f"✒️ خط مزخرف:\n{fancy}")
+
+@client.on(events.NewMessage(pattern=r'\.عكسي (.*)'))
+async def reverse_text(event):
+    text = event.pattern_match.group(1)
+    await event.reply(f"🔄 عكس النص:\n{text[::-1]}")
+
+@client.on(events.NewMessage(pattern=r'\.كبير (.*)'))
+async def big_text(event):
+    text = event.pattern_match.group(1)
+    await event.reply(f"🔠 نص كبير:\n{text.upper()}")
+
+# ========== نظام النقاط (م32) ==========
+@client.on(events.NewMessage(pattern=r'\.رصيدي'))
+async def my_balance(event):
+    user_id = event.sender_id
+    balance = user_balances.get(user_id, 0)
+    await event.reply(f"💰 رصيدك الحالي: **{balance}** نقطة")
+
+@client.on(events.NewMessage(pattern=r'\.تحويل (\d+) (?:@|)([\w]+)'))
+async def transfer_points(event):
+    try:
+        amount = int(event.pattern_match.group(1))
+        username = event.pattern_match.group(2)
+        sender_id = event.sender_id
+        user = await event.client.get_entity(username)
+        receiver_id = user.id
+        
+        if sender_id == receiver_id:
+            await event.reply("❌ لا يمكنك التحويل لنفسك")
+            return
+        
+        if user_balances.get(sender_id, 0) < amount:
+            await event.reply(f"❌ رصيدك غير كافٍ. رصيدك: {user_balances.get(sender_id, 0)}")
+            return
+        
+        user_balances[sender_id] = user_balances.get(sender_id, 0) - amount
+        user_balances[receiver_id] = user_balances.get(receiver_id, 0) + amount
+        await event.reply(f"✅ تم تحويل **{amount}** نقطة إلى @{username}")
+    except Exception as e:
+        await event.reply(f"❌ فشل التحويل: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'\.هدية (\d+) (?:@|)([\w]+)'))
+async def gift_points(event):
+    try:
+        amount = int(event.pattern_match.group(1))
+        username = event.pattern_match.group(2)
+        sender_id = event.sender_id
+        user = await event.client.get_entity(username)
+        receiver_id = user.id
+        
+        if sender_id == receiver_id:
+            await event.reply("❌ لا يمكنك إرسال هدية لنفسك")
+            return
+        
+        if user_balances.get(sender_id, 0) < amount:
+            await event.reply(f"❌ رصيدك غير كافٍ. رصيدك: {user_balances.get(sender_id, 0)}")
+            return
+        
+        user_balances[sender_id] = user_balances.get(sender_id, 0) - amount
+        user_balances[receiver_id] = user_balances.get(receiver_id, 0) + amount
+        await event.reply(f"🎁 تم إرسال **{amount}** نقطة كهدية إلى @{username}")
+    except Exception as e:
+        await event.reply(f"❌ فشل إرسال الهدية: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'\.توب'))
+async def top_balance(event):
+    if not user_balances:
+        await event.reply("❌ لا يوجد مستخدمين لديهم نقاط بعد")
+        return
+    sorted_users = sorted(user_balances.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_text = "🏆 **ترتيب الأغنياء:**\n\n"
+    for i, (user_id, balance) in enumerate(sorted_users, 1):
+        try:
+            user = await event.client.get_entity(user_id)
+            name = user.first_name or str(user_id)
+            top_text += f"{i}. {name} ➥ {balance} نقطة\n"
+        except:
+            top_text += f"{i}. مستخدم ➥ {balance} نقطة\n"
+    await event.reply(top_text)
+
+# ========== أمر الأوامر الكامل ==========
+@client.on(events.NewMessage(pattern=r'\.اوامر'))
+async def all_commands(event):
+    text = """
+**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - قائمة الأوامر الكاملة 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+⎆ **.م1** ➥ أوامر الإدارة والكروبات
+⎆ **.م2** ➥ أوامر الألعاب والترفيه
+⎆ **.م3** ➥ الأوامر الأساسية والإعدادات
+⎆ **.م4** ➥ أوامر متقدمة وإعدادات
+⎆ **.م5** ➥ الأوامر الوقتية والمزامنة
+⎆ **.م6** ➥ أوامر الإضافة والتفليش
+⎆ **.م7** ➥ الذكاء الاصطناعي والذاكرة
+⎆ **.م8** ➥ التخزين والأرشفة
+⎆ **.م9** ➥ تحويل ورفع الملفات
+⎆ **.م10** ➥ انتحال الهويات
+⎆ **.م11** ➥ الهمسات والرسائل السرية
+⎆ **.م12** ➥ ربط الواتساب
+⎆ **.م13** ➥ أوقات الصلاة والأذكار
+⎆ **.م14** ➥ النشر التلقائي والجدولة
+⎆ **.م15** ➥ أوامر المطور الخاصة
+⎆ **.م16** ➥ إنشاء ومغادرة المجموعات
+⎆ **.م17** ➥ البث الصوتي والأذكار
+⎆ **.م18** ➥ تحويل النص إلى صوت
+⎆ **.م19** ➥ أوامر إضافية متنوعة
+⎆ **.م20** ➥ البصمات الصوتية
+⎆ **.م21** ➥ أوامر الافتارات
+⎆ **.م22** ➥ أدوات التهكير المزحي
+⎆ **.م23** ➥ التاغ والمنشن الجماعي
+⎆ **.م24** ➥ حفظ الذاتية والإعدادات
+⎆ **.م25** ➥ رفع ترفيهي ومضحك
+⎆ **.م26** ➥ الاشتراك الإجباري للقنوات
+⎆ **.م27** ➥ صيد اليوزرات والمعرفات
+⎆ **.م28** ➥ تخصيص الكليشات والقوالب
+⎆ **.م29** ➥ حماية الرسائل الخاصة
+⎆ **.م30** ➥ تحميل الاستوريات
+⎆ **.م31** ➥ الخطوط والأنماط التلقائية
+⎆ **.م32** ➥ البنك وتجميع النقاط
+⎆ **.م33** ➥ الحالات الوهمية والمزيفة
+⎆ **.م34** ➥ البريد الإلكتروني المؤقت
+⎆ **.م35** ➥ مراقبة الأشخاص والتتبع
+⎆ **.م36** ➥ أوامر التسلية الإضافية
+⎆ **.م37** ➥ أوامر التعيينات
+⎆ **.م38** ➥ بوت التواصل والدعم
+⎆ **.م39** ➥ أوامر المناسبات الدينية
+⎆ **.م40** ➥ أوامر البلاغات
+⎆ **.م41** ➥ تحديثات شاومي
+⎆ **.م42** ➥ هدايا تليجرام (النجوم)
+⎆ **.م43** ➥ أوامر المسابقات
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+𓆩 - قناة السورس 𓆪
+@SSSTlF
+"""
+    await event.reply(text)
+
+# ========== أمر إضافة نقاط (للمطور) ==========
+@client.on(events.NewMessage(pattern=r'\.اضافة نقاط (\d+) (?:@|)([\w]+)'))
+async def add_points(event):
+    try:
+        amount = int(event.pattern_match.group(1))
+        username = event.pattern_match.group(2)
+        user = await event.client.get_entity(username)
+        user_balances[user.id] = user_balances.get(user.id, 0) + amount
+        await event.reply(f"✅ تم إضافة **{amount}** نقطة إلى @{username}")
+    except Exception as e:
+        await event.reply(f"❌ فشل الإضافة: {str(e)}")
 
 # ========== خادم ويب وهمي لإرضاء Render ==========
 async def run_web_server():
