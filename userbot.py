@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from telethon.tl.types import MessageMediaPhoto
-from telethon.errors import FloodWaitError, PhoneNumberInvalidError, PhoneCodeInvalidError
+from telethon.errors import FloodWaitError, PhoneNumberInvalidError, PhoneCodeInvalidError, SessionPasswordNeededError
 from telethon.tl.functions.account import UpdateProfileRequest
 
 # ========== إعدادات البوت ==========
@@ -30,8 +30,9 @@ install_waiting = False
 install_user_id = None
 install_phone = None
 install_client = None
-install_step = "phone"  # phone, code, done
+install_step = "phone"
 install_hash = None
+install_password = None
 
 # ========== قائمة الحكم والكلمات ==========
 QUOTES = [
@@ -121,10 +122,10 @@ async def add_time_to_message(event):
     except Exception as e:
         print(f"❌ خطأ في تحديث الاسم: {e}")
 
-# ========== معالج التنصيب التلقائي (مُصلح) ==========
+# ========== معالج التنصيب التلقائي (مُصلح بالكامل) ==========
 @client.on(events.NewMessage(incoming=True))
 async def handle_install_input(event):
-    global install_waiting, install_user_id, install_phone, install_client, install_step, install_hash
+    global install_waiting, install_user_id, install_phone, install_client, install_step, install_hash, install_password
 
     if not install_waiting:
         return
@@ -169,12 +170,66 @@ async def handle_install_input(event):
             code = event.text.strip()
             
             try:
-                # تسجيل الدخول بالرمز + الـ hash
+                # محاولة تسجيل الدخول بالرمز
                 await install_client.sign_in(
                     phone=install_phone,
                     code=code,
                     phone_code_hash=install_hash
                 )
+                
+                # إذا نجح التسجيل
+                me_new = await install_client.get_me()
+                new_session = install_client.session.save()
+                
+                await event.reply(f"""
+✅ **تم التنصيب بنجاح!**
+
+📋 المعرف: `{me_new.id}`
+📛 الاسم: {me_new.first_name}
+🆔 اليوزر: @{me_new.username if me_new.username else 'لا يوجد'}
+
+🔄 جاري حفظ الجلسة وإعادة التشغيل...
+✧ سورس عبود ✧
+""")
+
+                # حفظ الجلسة
+                with open("session.string", "w") as f:
+                    f.write(new_session)
+                
+                os.environ["SESSION_STRING"] = new_session
+                
+                await install_client.disconnect()
+                await client.disconnect()
+                
+                # إعادة تشغيل البوت
+                subprocess.Popen([sys.executable, __file__])
+                sys.exit(0)
+
+            except SessionPasswordNeededError:
+                # إذا كان الحساب مفعل بخطوتين
+                await event.reply("""
+🔐 **مطلوب كلمة مرور الخطوتين!**
+
+📌 أرسل الآن كلمة المرور الخاصة بحسابك
+⚠️ سيتم استخدامها لتسجيل الدخول
+✧ سورس عبود ✧
+""")
+                install_step = "password"
+                
+            except PhoneCodeInvalidError:
+                await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة")
+            except Exception as e:
+                await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة باستخدام `.تنصيب`")
+                install_waiting = False
+                install_step = "phone"
+                await install_client.disconnect()
+
+        elif install_step == "password":
+            password = event.text.strip()
+            
+            try:
+                # تسجيل الدخول بكلمة المرور
+                await install_client.sign_in(password=password)
                 
                 me_new = await install_client.get_me()
                 new_session = install_client.session.save()
@@ -186,38 +241,31 @@ async def handle_install_input(event):
 📛 الاسم: {me_new.first_name}
 🆔 اليوزر: @{me_new.username if me_new.username else 'لا يوجد'}
 
-🔄 جاري حفظ الجلسة...
+🔄 جاري حفظ الجلسة وإعادة التشغيل...
 ✧ سورس عبود ✧
 """)
 
-                # حفظ الجلسة في ملف .session
                 with open("session.string", "w") as f:
                     f.write(new_session)
                 
-                # تحديث متغير البيئة
                 os.environ["SESSION_STRING"] = new_session
                 
                 await install_client.disconnect()
                 await client.disconnect()
                 
-                # إعادة تشغيل البوت بطريقة آمنة
                 subprocess.Popen([sys.executable, __file__])
                 sys.exit(0)
 
-            except PhoneCodeInvalidError:
-                await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة")
             except Exception as e:
-                await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة باستخدام `.تنصيب`")
-                install_waiting = False
-                install_step = "phone"
-                await install_client.disconnect()
+                await event.reply(f"❌ كلمة المرور غير صحيحة!\nالخطأ: {str(e)}\n\n📌 أعد المحاولة")
+                install_step = "password"
 
     except Exception as e:
         await event.reply(f"❌ خطأ عام: {str(e)}")
         install_waiting = False
         install_step = "phone"
 
-# ========== أمر التنصيب الجديد ==========
+# ========== أمر التنصيب ==========
 @client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
 async def install_bot(event):
     global install_waiting, install_user_id, install_step
@@ -235,12 +283,12 @@ async def install_bot(event):
 📥 **أمر التنصيب التلقائي**
 
 📌 أرسل الآن رقم هاتفك مع مفتاح الدولة
-📱 مثال: `+9665XXXXXXXX`
+📱 مثال: `+201270270609`
 
 ⚠️ **تنبيه:**
 • سيتم إرسال رمز التحقق تلقائياً
 • بعد استلام الرمز، أرسله هنا
-• سيتم تبديل الحساب تلقائياً
+• إذا كان الحساب مفعل بخطوتين ستحتاج لإرسال كلمة المرور
 
 ✧ سورس عبود ✧
 """)
