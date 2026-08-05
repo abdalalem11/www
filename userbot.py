@@ -145,7 +145,6 @@ async def handle_install_input(event):
             await install_client.connect()
 
             try:
-                # إرسال طلب الرمز مع حفظ الـ hash
                 result = await install_client.send_code_request(phone)
                 install_hash = result.phone_code_hash
                 
@@ -165,19 +164,22 @@ async def handle_install_input(event):
                 install_waiting = False
                 install_step = "phone"
                 await install_client.disconnect()
+            except FloodWaitError as e:
+                await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
+                install_waiting = False
+                install_step = "phone"
+                await install_client.disconnect()
 
         elif install_step == "code":
             code = event.text.strip()
             
             try:
-                # محاولة تسجيل الدخول بالرمز
                 await install_client.sign_in(
                     phone=install_phone,
                     code=code,
                     phone_code_hash=install_hash
                 )
                 
-                # إذا نجح التسجيل
                 me_new = await install_client.get_me()
                 new_session = install_client.session.save()
                 
@@ -192,7 +194,6 @@ async def handle_install_input(event):
 ✧ سورس عبود ✧
 """)
 
-                # حفظ الجلسة
                 with open("session.string", "w") as f:
                     f.write(new_session)
                 
@@ -201,12 +202,10 @@ async def handle_install_input(event):
                 await install_client.disconnect()
                 await client.disconnect()
                 
-                # إعادة تشغيل البوت
                 subprocess.Popen([sys.executable, __file__])
                 sys.exit(0)
 
             except SessionPasswordNeededError:
-                # إذا كان الحساب مفعل بخطوتين
                 await event.reply("""
 🔐 **مطلوب كلمة مرور الخطوتين!**
 
@@ -218,6 +217,8 @@ async def handle_install_input(event):
                 
             except PhoneCodeInvalidError:
                 await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة")
+            except FloodWaitError as e:
+                await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
             except Exception as e:
                 await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة باستخدام `.تنصيب`")
                 install_waiting = False
@@ -228,7 +229,6 @@ async def handle_install_input(event):
             password = event.text.strip()
             
             try:
-                # تسجيل الدخول بكلمة المرور
                 await install_client.sign_in(password=password)
                 
                 me_new = await install_client.get_me()
