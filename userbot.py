@@ -71,6 +71,214 @@ CMD_LIST = {
     ".م43": "أوامـر المسابقـات"
 }
 
+# ========== قاموس الأوامر الفرعية ==========
+SUB_COMMANDS = {
+    ".م1": [
+        ("طرد", "طرد عضو من المجموعة"),
+        ("كتم", "كتم عضو مؤقتاً"),
+        ("رفع مشرف", "ترقية عضو لمشرف"),
+        ("تنزيل مشرف", "إلغاء صلاحيات المشرف"),
+        ("حظر", "حظر عضو نهائياً"),
+        ("الغاء حظر", "إلغاء حظر عضو"),
+        ("تثبيت", "تثبيت رسالة"),
+        ("الغاء تثبيت", "إلغاء تثبيت الرسالة"),
+        ("تنظيف", "حذف رسائل محددة"),
+        ("تعديل", "تعديل رسالة مرسلة")
+    ],
+    ".م2": [
+        ("نرد", "رمي النرد"),
+        ("نكتة", "نكتة مضحكة"),
+        ("تويت", "تغريدة عشوائية"),
+        ("سؤال", "سؤال عشوائي"),
+        ("تخمين", "لعبة تخمين الرقم"),
+        ("حصان", "لعبة الحصان")
+    ],
+    ".م3": [
+        ("اعدادات", "إعدادات البوت"),
+        ("تغيير الاسم", "تغيير اسم البوت"),
+        ("تغيير الصورة", "تغيير صورة البوت"),
+        ("حالة", "حالة البوت")
+    ],
+    ".م4": [
+        ("تشفير", "تشفير نص"),
+        ("فك تشفير", "فك تشفير نص"),
+        ("ضغط", "ضغط ملف"),
+        ("فك ضغط", "فك ضغط ملف")
+    ],
+    ".م5": [
+        ("تذكير", "تذكير مؤقت"),
+        ("جدول", "جدولة مهمة"),
+        ("موعد", "موعد محدد")
+    ],
+    ".م6": [
+        ("اضافة", "إضافة عضو"),
+        ("حذف", "حذف عضو"),
+        ("تفليش", "تفليش المجموعة")
+    ],
+    ".م7": [
+        ("ترجم", "ترجمة النص"),
+        ("ذكي", "سؤال الذكاء الاصطناعي"),
+        ("ملخص", "تلخيص النص"),
+        ("تحليل", "تحليل رسالة")
+    ],
+    ".م8": [
+        ("حفظ", "حفظ رسالة"),
+        ("استرجاع", "استرجاع رسالة"),
+        ("ارشفة", "أرشفة المحادثة")
+    ],
+    ".م9": [
+        ("تحميل", "تحميل من رابط"),
+        ("فيديو", "تحميل فيديو"),
+        ("صورة", "تحميل صورة"),
+        ("موسيقى", "تحميل موسيقى"),
+        ("رفع", "رفع ملف")
+    ],
+    ".م10": [
+        ("تغيير هوية", "تغيير هوية الحساب"),
+        ("اخفاء", "إخفاء الهوية"),
+        ("تمويه", "تمويه الهوية")
+    ],
+    ".م11": [
+        ("همس", "إرسال همس لشخص"),
+        ("رسالة سرية", "إرسال رسالة سرية"),
+        ("تشفير رسالة", "تشفير رسالة")
+    ],
+    ".م12": [
+        ("ربط واتساب", "ربط حساب واتساب"),
+        ("فصل واتساب", "فصل حساب واتساب")
+    ],
+    ".م13": [
+        ("صلاة", "مواقيت الصلاة"),
+        ("اذكار", "أذكار الصباح والمساء"),
+        ("قرآن", "آية عشوائية")
+    ],
+    ".م14": [
+        ("نشر تلقائي", "تفعيل النشر التلقائي"),
+        ("جدولة منشور", "جدولة منشور")
+    ],
+    ".م15": [
+        ("تحديث", "تحديث البوت"),
+        ("اعادة تشغيل", "إعادة تشغيل البوت"),
+        ("توقف", "إيقاف البوت")
+    ],
+    ".م16": [
+        ("انشاء مجموعة", "إنشاء مجموعة جديدة"),
+        ("مغادرة مجموعة", "مغادرة المجموعة")
+    ],
+    ".م17": [
+        ("بث صوتي", "بث صوتي مباشر"),
+        ("تسجيل", "تسجيل صوتي")
+    ],
+    ".م18": [
+        ("نص لصوت", "تحويل نص إلى صوت"),
+        ("صوت لنص", "تحويل صوت إلى نص")
+    ],
+    ".م19": [
+        ("تطبيقات", "أوامر تطبيقات"),
+        ("مواقع", "أوامر مواقع")
+    ],
+    ".م20": [
+        ("بصمة", "بصمة صوتية"),
+        ("تسجيل بصمة", "تسجيل بصمة صوتية")
+    ],
+    ".م21": [
+        ("افتار", "جلب افتار"),
+        ("تغيير افتار", "تغيير الافتار")
+    ],
+    ".م22": [
+        ("مزح", "تهكير مزحي"),
+        ("خدعة", "خدعة مزاحية")
+    ],
+    ".م23": [
+        ("تاغ عام", "تاغ جميع الأعضاء"),
+        ("تاغ خاص", "تاغ مع نص مخصص"),
+        ("منشن", "منشن مع نص")
+    ],
+    ".م24": [
+        ("حفظ اعدادات", "حفظ إعدادات البوت"),
+        ("استرجاع اعدادات", "استرجاع الإعدادات")
+    ],
+    ".م25": [
+        ("رفع ترفيهي", "رفع ترفيهي"),
+        ("مضحك", "محتوى مضحك")
+    ],
+    ".م26": [
+        ("اشتراك اجباري", "تفعيل الاشتراك الإجباري"),
+        ("قنوات", "قائمة القنوات")
+    ],
+    ".م27": [
+        ("بحث يوزر", "بحث عن يوزر"),
+        ("صيد يوزرات", "صيد يوزرات")
+    ],
+    ".م28": [
+        ("كليشات", "قائمة الكليشات"),
+        ("قوالب", "قائمة القوالب")
+    ],
+    ".م29": [
+        ("حماية", "تفعيل حماية الرسائل"),
+        ("فلتر", "فلتر الكلمات")
+    ],
+    ".م30": [
+        ("استوري", "تحميل استوري شخص"),
+        ("استوري قناة", "تحميل استوري قناة")
+    ],
+    ".م31": [
+        ("خط", "تحويل النص لخط مزخرف"),
+        ("عكسي", "عكس النص"),
+        ("كبير", "تكبير النص")
+    ],
+    ".م32": [
+        ("رصيدي", "عرض الرصيد"),
+        ("تحويل", "تحويل نقاط لشخص"),
+        ("هدية", "إرسال هدية لشخص"),
+        ("توب", "ترتيب الأغنياء")
+    ],
+    ".م33": [
+        ("حالة وهمية", "حالة وهمية"),
+        ("مزيف", "حالة مزيفة")
+    ],
+    ".م34": [
+        ("بريد مؤقت", "بريد إلكتروني مؤقت"),
+        ("استلام", "استلام البريد")
+    ],
+    ".م35": [
+        ("تتبع", "تتبع شخص"),
+        ("مراقبة", "مراقبة قناة")
+    ],
+    ".م36": [
+        ("تسلية", "أوامر تسلية إضافية"),
+        ("فكاهة", "فكاهة")
+    ],
+    ".م37": [
+        ("تعيين", "تعيين عضو"),
+        ("الغاء تعيين", "إلغاء تعيين")
+    ],
+    ".م38": [
+        ("تواصل", "التواصل مع الدعم"),
+        ("دعم", "طلب دعم")
+    ],
+    ".م39": [
+        ("مناسبة", "مناسبة دينية"),
+        ("تقويم", "تقويم ديني")
+    ],
+    ".م40": [
+        ("بلاغ", "إرسال بلاغ"),
+        ("شكوى", "إرسال شكوى")
+    ],
+    ".م41": [
+        ("شاومي", "تحديثات شاومي"),
+        ("اخبار", "أخبار شاومي")
+    ],
+    ".م42": [
+        ("نجوم", "هدايا تليجرام"),
+        ("ارسال هدية", "إرسال هدية نجمة")
+    ],
+    ".م43": [
+        ("مسابقة", "إنشاء مسابقة"),
+        ("نتيجة", "نتيجة المسابقة")
+    ]
+}
+
 # ========== نظام النقاط المؤقت ==========
 user_balances = {}
 
@@ -79,10 +287,9 @@ user_balances = {}
 async def main_menu(event):
     user = await event.get_sender()
     name = user.first_name or "المستخدم"
-    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - قائمـة الأوامـر 𓆪**
+    text = f"""**ᯓ  سورس عبود - قائمـة الأوامـر 𓆪**
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ مـرحبًــا {name}
-⎆ اضغـط ع الامـر لـ رؤية التفاصيل
+⎆ مـرحبًــا {name} - اضغـط ع الامـر لـ النسـخ
 ⎆ ضـع نقطة (.) بداية كل امـر :
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
     
@@ -94,136 +301,51 @@ async def main_menu(event):
     
     await event.reply(text, buttons=buttons)
 
-# ========== معالج الأزرار ==========
+# ========== معالج الأزرار مع النسخ التلقائي ==========
 @client.on(events.CallbackQuery)
 async def callback_handler(event):
     data = event.data.decode()
     
     if data.startswith("show_"):
         cmd = data.replace("show_", "")
-        await event.answer(f"✅ تم اختيار {cmd}")
-        if cmd == ".م1":
-            await admin_menu(event)
-        elif cmd == ".م2":
-            await games_menu(event)
-        elif cmd == ".م7":
-            await ai_menu(event)
-        elif cmd == ".م23":
-            await tag_menu(event)
-        elif cmd == ".م31":
-            await fonts_menu(event)
-        elif cmd == ".م32":
-            await bank_menu(event)
+        # عرض القائمة الفرعية مع أزرار النسخ
+        if cmd in SUB_COMMANDS:
+            text = f"""**ᯓ  سورس عبود - {CMD_LIST.get(cmd, '')} 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+            buttons = []
+            for sub_cmd, desc in SUB_COMMANDS[cmd]:
+                buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+            buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+            await event.edit(text, buttons=buttons)
         else:
-            await event.edit(f"**الأمر:** {cmd}\n**الوصف:** {CMD_LIST.get(cmd, '')}\n\n📌 سيتم إضافة الأوامر الفرعية قريباً")
+            await event.answer("📌 سيتم إضافة الأوامر الفرعية قريباً")
+    
+    elif data.startswith("copy_"):
+        cmd = data.replace("copy_", "")
+        await event.answer(f"✅ تم نسخ الأمر: .{cmd}", alert=False)
+        await event.edit(f"**الأمر:** `.{cmd}`\n\n✅ تم النسخ، أرسل الأمر الآن")
     
     elif data == "menu":
         await main_menu(event)
 
-# ========== قوائم الأوامر الرئيسية ==========
-@client.on(events.NewMessage(pattern=r'\.م1'))
-async def admin_menu(event):
-    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الإدارة والكروبـات 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **.طرد** ➥ طرد عضو من المجموعة
-⎆ **.كتم** ➥ كتم عضو مؤقتاً
-⎆ **.رفع مشرف** ➥ ترقية عضو لمشرف
-⎆ **.تنزيل مشرف** ➥ إلغاء صلاحيات المشرف
-⎆ **.حظر** ➥ حظر عضو نهائياً
-⎆ **.الغاء حظر** ➥ إلغاء حظر عضو
-⎆ **.تثبيت** ➥ تثبيت رسالة
-⎆ **.الغاء تثبيت** ➥ إلغاء تثبيت الرسالة
-⎆ **.تنظيف** ➥ حذف رسائل محددة
-⎆ **.تعديل** ➥ تعديل رسالة مرسلة
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩 - قنـاة السـورس 𓆪
-@SSSTlF"""
-    if isinstance(event, events.CallbackQuery):
-        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
+# ========== جميع قوائم الأوامر الرئيسية ==========
+@client.on(events.NewMessage(pattern=r'\.م(\d+)'))
+async def all_menus(event):
+    cmd = f".م{event.pattern_match.group(1)}"
+    if cmd in SUB_COMMANDS:
+        text = f"""**ᯓ  سورس عبود - {CMD_LIST.get(cmd, '')} 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
+        buttons = []
+        for sub_cmd, desc in SUB_COMMANDS[cmd]:
+            buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
+        buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
+        await event.reply(text, buttons=buttons)
     else:
-        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
+        await event.reply(f"📌 قائمة {cmd} سيتم إضافتها قريباً")
 
-@client.on(events.NewMessage(pattern=r'\.م2'))
-async def games_menu(event):
-    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الألعـاب والترفيـه 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **.نرد** ➥ رمي النرد
-⎆ **.نكتة** ➥ نكتة مضحكة
-⎆ **.تويت** ➥ تغريدة عشوائية
-⎆ **.سؤال** ➥ سؤال عشوائي
-⎆ **.تخمين** ➥ لعبة تخمين الرقم
-⎆ **.حصان** ➥ لعبة الحصان
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩 - قنـاة السـورس 𓆪
-@SSSTlF"""
-    if isinstance(event, events.CallbackQuery):
-        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
-    else:
-        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
+# ========== الأوامر الفرعية الفعلية ==========
 
-@client.on(events.NewMessage(pattern=r'\.م7'))
-async def ai_menu(event):
-    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - الذكـاء الاصطناعـي والذاكـرة 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **.ترجم** ➥ ترجمة النص
-⎆ **.ذكي** ➥ سؤال الذكاء الاصطناعي
-⎆ **.ملخص** ➥ تلخيص النص
-⎆ **.تحليل** ➥ تحليل رسالة
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩 - قنـاة السـورس 𓆪
-@SSSTlF"""
-    if isinstance(event, events.CallbackQuery):
-        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
-    else:
-        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
-
-@client.on(events.NewMessage(pattern=r'\.م23'))
-async def tag_menu(event):
-    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - التاغ والمنشـن الجماعـي 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **.تاغ عام** ➥ تاغ جميع الأعضاء
-⎆ **.تاغ خاص** ➥ تاغ مع نص مخصص
-⎆ **.منشن** ➥ منشن مع نص
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩 - قنـاة السـورس 𓆪
-@SSSTlF"""
-    if isinstance(event, events.CallbackQuery):
-        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
-    else:
-        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
-
-@client.on(events.NewMessage(pattern=r'\.م31'))
-async def fonts_menu(event):
-    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - الخطـوط والأنمـاط التلقائيـة 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **.خط** ➥ تحويل النص لخط مزخرف
-⎆ **.عكسي** ➥ عكس النص
-⎆ **.كبير** ➥ تكبير النص
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩 - قنـاة السـورس 𓆪
-@SSSTlF"""
-    if isinstance(event, events.CallbackQuery):
-        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
-    else:
-        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
-
-@client.on(events.NewMessage(pattern=r'\.م32'))
-async def bank_menu(event):
-    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - البنـك وتجميـع النقـاط 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **.رصيدي** ➥ عرض الرصيد
-⎆ **.تحويل** ➥ تحويل نقاط لشخص
-⎆ **.هدية** ➥ إرسال هدية لشخص
-⎆ **.توب** ➥ ترتيب الأغنياء
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩 - قنـاة السـورس 𓆪
-@SSSTlF"""
-    if isinstance(event, events.CallbackQuery):
-        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
-    else:
-        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
-
-# ========== أوامر الإدارة (م1) ==========
+# ----- أوامر الإدارة (م1) -----
 @client.on(events.NewMessage(pattern=r'\.طرد (?:@|)([\w]+)'))
 async def kick_user(event):
     try:
@@ -339,7 +461,7 @@ async def edit_message(event):
     except Exception as e:
         await event.reply(f"❌ فشل التعديل: {str(e)}")
 
-# ========== أوامر الألعاب (م2) ==========
+# ----- أوامر الألعاب (م2) -----
 @client.on(events.NewMessage(pattern=r'\.نرد'))
 async def dice(event):
     num = random.randint(1, 6)
@@ -352,6 +474,7 @@ async def joke(event):
         "ماذا قال الجوال للحاسوب؟ لا تنسَ أن تشحن نفسك! 🔋",
         "لماذا ذهب المبرمج إلى الطبيب؟ لأنه كان يعاني من `SyntaxError` في حياته 😅",
         "ما الفرق بين المبرمج والطبيب؟ المبرمج يعالج الأخطاء والطبيب يعالج المرضى 🤓",
+        "لماذا لا يتحدث المبرمج مع أحد؟ لأنه يفضل الـ `Silent Mode` 😄"
     ]
     await event.reply(random.choice(jokes))
 
@@ -362,16 +485,18 @@ async def tweet(event):
         "كن التغيير الذي تريد رؤيته في العالم.",
         "الحياة ليست عن إيجاد الذات، الحياة عن خلق الذات.",
         "المستقبل لأولئك الذين يؤمنون بجمال أحلامهم.",
+        "لا تخف من الفشل، اخشَ عدم المحاولة."
     ]
     await event.reply(f"🐦 {random.choice(tweets)}")
 
 @client.on(events.NewMessage(pattern=r'\.سؤال'))
 async def random_question(event):
     questions = [
-        "ما هو الشيء الذي كلما زاد نقص؟",
-        "ما هو الشيء الذي له عين ولا يرى؟",
-        "ما هو الشيء الذي يمشي بلا رجلين؟",
-        "ما هو الشيء الذي تأكله ولا تستطيع أن تأكله؟",
+        "ما هو الشيء الذي كلما زاد نقص؟ (الجواب: العمر)",
+        "ما هو الشيء الذي له عين ولا يرى؟ (الجواب: الإبرة)",
+        "ما هو الشيء الذي يمشي بلا رجلين؟ (الجواب: الساعة)",
+        "ما هو الشيء الذي تأكله ولا تستطيع أن تأكله؟ (الجواب: الصبر)",
+        "ما هو الشيء الذي له جلد ولا هو حيوان؟ (الجواب: البصل)"
     ]
     await event.reply(f"❓ {random.choice(questions)}")
 
@@ -395,24 +520,29 @@ async def horse_game(event):
     winner = random.choice(horses)
     await event.reply(f"🏁 سباق الخيول!\nالفائز: {winner}")
 
-# ========== أوامر الذكاء الاصطناعي (م7) ==========
+# ----- أوامر الذكاء الاصطناعي (م7) -----
 @client.on(events.NewMessage(pattern=r'\.ترجم (.*)'))
 async def translate_text(event):
     text = event.pattern_match.group(1)
-    await event.reply(f"🌐 الترجمة التقريبية: {text} (هنا ستظهر الترجمة الفعلية عند ربطها بمكتبة ترجمة)")
+    await event.reply(f"🌐 الترجمة التقريبية:\n{text}\n\n(سيتم تفعيل الترجمة الفعلية قريباً)")
 
 @client.on(events.NewMessage(pattern=r'\.ذكي (.*)'))
 async def ai_reply(event):
     question = event.pattern_match.group(1)
-    await event.reply(f"🧠 رد الذكاء الاصطناعي: سؤالك '{question}' مهم جداً، لكنني حالياً في وضع التطوير! 🤖")
+    replies = [
+        f"🧠 سؤال ذكي: '{question}'\nجوابي: هذا سؤال مهم، لكنني في طور التعلم!",
+        f"🧠 '{question}'\nجوابي: أحتاج إلى مزيد من البيانات للإجابة بدقة.",
+        f"🧠 '{question}'\nجوابي: شكراً على سؤالك، سأجيب قريباً بعد التحديث."
+    ]
+    await event.reply(random.choice(replies))
 
 @client.on(events.NewMessage(pattern=r'\.ملخص'))
 async def summarize_text(event):
     msg = await event.get_reply_message()
     if msg and msg.text:
         text = msg.text
-        summary = text[:100] + "..." if len(text) > 100 else text
-        await event.reply(f"📝 الملخص: {summary}")
+        summary = text[:150] + "..." if len(text) > 150 else text
+        await event.reply(f"📝 الملخص:\n{summary}")
     else:
         await event.reply("❌ قم بالرد على نص لتلخيصه")
 
@@ -424,11 +554,12 @@ async def analyze_message(event):
         analysis += f"• الطول: {len(msg.text)} حرف\n"
         analysis += f"• الكلمات: {len(msg.text.split())} كلمة\n"
         analysis += f"• التاريخ: {msg.date}\n"
+        analysis += f"• المعرف: {msg.sender_id}\n"
         await event.reply(analysis)
     else:
         await event.reply("❌ قم بالرد على رسالة لتحليلها")
 
-# ========== أوامر التاغ (م23) ==========
+# ----- أوامر التاغ (م23) -----
 @client.on(events.NewMessage(pattern=r'\.تاغ عام'))
 async def tag_all(event):
     try:
@@ -439,7 +570,6 @@ async def tag_all(event):
             if p.username:
                 mentions.append(f"@{p.username}")
         if mentions:
-            # تقسيم إلى مجموعات لتجنب الطول الزائد
             chunks = [mentions[i:i+20] for i in range(0, len(mentions), 20)]
             for chunk in chunks:
                 await event.reply(" ".join(chunk))
@@ -479,11 +609,18 @@ async def mention_text(event):
     except Exception as e:
         await event.reply(f"❌ فشل المنشن: {str(e)}")
 
-# ========== أوامر الخطوط (م31) ==========
+# ----- أوامر الخطوط (م31) -----
 @client.on(events.NewMessage(pattern=r'\.خط (.*)'))
 async def fancy_text(event):
     text = event.pattern_match.group(1)
-    fancy = "".join([chr(ord(c) + 0x1D400) if c.isalpha() else c for c in text])
+    fancy = ""
+    for c in text:
+        if 'a' <= c <= 'z':
+            fancy += chr(ord(c) + 0x1D400)
+        elif 'A' <= c <= 'Z':
+            fancy += chr(ord(c) + 0x1D400)
+        else:
+            fancy += c
     await event.reply(f"✒️ خط مزخرف:\n{fancy}")
 
 @client.on(events.NewMessage(pattern=r'\.عكسي (.*)'))
@@ -496,7 +633,7 @@ async def big_text(event):
     text = event.pattern_match.group(1)
     await event.reply(f"🔠 نص كبير:\n{text.upper()}")
 
-# ========== نظام النقاط (م32) ==========
+# ----- نظام النقاط (م32) -----
 @client.on(events.NewMessage(pattern=r'\.رصيدي'))
 async def my_balance(event):
     user_id = event.sender_id
@@ -565,11 +702,21 @@ async def top_balance(event):
             top_text += f"{i}. مستخدم ➥ {balance} نقطة\n"
     await event.reply(top_text)
 
-# ========== أمر الأوامر الكامل ==========
+# ----- أوامر إضافية -----
+@client.on(events.NewMessage(pattern=r'\.اضافة نقاط (\d+) (?:@|)([\w]+)'))
+async def add_points(event):
+    try:
+        amount = int(event.pattern_match.group(1))
+        username = event.pattern_match.group(2)
+        user = await event.client.get_entity(username)
+        user_balances[user.id] = user_balances.get(user.id, 0) + amount
+        await event.reply(f"✅ تم إضافة **{amount}** نقطة إلى @{username}")
+    except Exception as e:
+        await event.reply(f"❌ فشل الإضافة: {str(e)}")
+
 @client.on(events.NewMessage(pattern=r'\.اوامر'))
 async def all_commands(event):
-    text = """
-**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - قائمة الأوامر الكاملة 𓆪**
+    text = """**ᯓ  سورس عبود - قائمة الأوامر الكاملة 𓆪**
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
 ⎆ **.م1** ➥ أوامر الإدارة والكروبات
 ⎆ **.م2** ➥ أوامر الألعاب والترفيه
@@ -615,26 +762,12 @@ async def all_commands(event):
 ⎆ **.م42** ➥ هدايا تليجرام (النجوم)
 ⎆ **.م43** ➥ أوامر المسابقات
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩 - قناة السورس 𓆪
-@SSSTlF
-"""
+ 𓆩  سورس عبود - قنـاة السـورس 𓆪
+ @SSSTlF"""
     await event.reply(text)
-
-# ========== أمر إضافة نقاط (للمطور) ==========
-@client.on(events.NewMessage(pattern=r'\.اضافة نقاط (\d+) (?:@|)([\w]+)'))
-async def add_points(event):
-    try:
-        amount = int(event.pattern_match.group(1))
-        username = event.pattern_match.group(2)
-        user = await event.client.get_entity(username)
-        user_balances[user.id] = user_balances.get(user.id, 0) + amount
-        await event.reply(f"✅ تم إضافة **{amount}** نقطة إلى @{username}")
-    except Exception as e:
-        await event.reply(f"❌ فشل الإضافة: {str(e)}")
 
 # ========== خادم ويب وهمي لإرضاء Render ==========
 async def run_web_server():
-    """خادم ويب بسيط لإبقاء Render سعيداً"""
     from aiohttp import web
     
     async def handle(request):
@@ -650,16 +783,12 @@ async def run_web_server():
     await site.start()
     print(f"✅ خادم الويب الوهمي يعمل على المنفذ {port}")
     
-    # إبقاء الخادم مفتوحاً
     await asyncio.Event().wait()
 
-# ========== تشغيل البوت مع خادم الويب ==========
+# ========== تشغيل البوت ==========
 async def main():
-    # تشغيل البوت في الخلفية
     await client.start()
     print("✅ البوت يعمل الآن...")
-    
-    # تشغيل خادم الويب الوهمي
     await run_web_server()
 
 if __name__ == "__main__":
