@@ -71,69 +71,8 @@ CMD_LIST = {
     ".م43": "أوامـر المسابقـات"
 }
 
-# ========== قاموس الأوامر الفرعية لكل قائمة ==========
-SUB_COMMANDS = {
-    ".م1": [
-        ("طرد", "طرد عضو من المجموعة"),
-        ("كتم", "كتم عضو مؤقتاً"),
-        ("رفع مشرف", "ترقية عضو لمشرف"),
-        ("تنزيل مشرف", "إلغاء صلاحيات المشرف"),
-        ("حظر", "حظر عضو نهائياً"),
-        ("الغاء حظر", "إلغاء حظر عضو"),
-        ("تثبيت", "تثبيت رسالة"),
-        ("الغاء تثبيت", "إلغاء تثبيت الرسالة"),
-        ("تنظيف", "حذف رسائل محددة"),
-        ("تعديل", "تعديل رسالة مرسلة")
-    ],
-    ".م2": [
-        ("حصان", "لعبة الحصان (تخمين)"),
-        ("سؤال", "سؤال عشوائي"),
-        ("نرد", "رمي النرد"),
-        ("تخمين", "لعبة تخمين الرقم"),
-        ("تويت", "تغريدة عشوائية"),
-        ("نكتة", "نكتة مضحكة")
-    ],
-    ".م7": [
-        ("ترجم", "ترجمة النص"),
-        ("ذكي", "سؤال الذكاء الاصطناعي"),
-        ("ملخص", "تلخيص النص"),
-        ("تحليل", "تحليل رسالة")
-    ],
-    ".م9": [
-        ("تحميل", "تحميل من رابط"),
-        ("فيديو", "تحميل فيديو"),
-        ("صورة", "تحميل صورة"),
-        ("موسيقى", "تحميل موسيقى")
-    ],
-    ".م11": [
-        ("همس", "إرسال همس لشخص"),
-        ("رسالة سرية", "إرسال رسالة سرية")
-    ],
-    ".م23": [
-        ("تاغ عام", "تاغ جميع الأعضاء"),
-        ("تاغ خاص", "تاغ مع نص مخصص"),
-        ("منشن", "منشن مع نص")
-    ],
-    ".م30": [
-        ("استوري", "تحميل استوري شخص"),
-        ("استوري قناة", "تحميل استوري قناة")
-    ],
-    ".م31": [
-        ("خط", "تحويل النص لخط مزخرف"),
-        ("عكسي", "عكس النص"),
-        ("كبير", "تكبير النص")
-    ],
-    ".م32": [
-        ("رصيدي", "عرض الرصيد"),
-        ("تحويل", "تحويل نقاط لشخص"),
-        ("هدية", "إرسال هدية لشخص"),
-        ("توب", "ترتيب الأغنياء")
-    ]
-}
-
 # ========== نظام النقاط المؤقت ==========
 user_balances = {}
-user_warnings = {}
 
 # ========== أمر القائمة الرئيسية ==========
 @client.on(events.NewMessage(pattern=r'\.قائمة'))
@@ -162,21 +101,21 @@ async def callback_handler(event):
     
     if data.startswith("show_"):
         cmd = data.replace("show_", "")
-        if cmd in SUB_COMMANDS:
-            text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - {CMD_LIST.get(cmd, '')} 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-            buttons = []
-            for sub_cmd, desc in SUB_COMMANDS[cmd]:
-                buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
-            buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
-            await event.edit(text, buttons=buttons)
+        await event.answer(f"✅ تم اختيار {cmd}")
+        if cmd == ".م1":
+            await admin_menu(event)
+        elif cmd == ".م2":
+            await games_menu(event)
+        elif cmd == ".م7":
+            await ai_menu(event)
+        elif cmd == ".م23":
+            await tag_menu(event)
+        elif cmd == ".م31":
+            await fonts_menu(event)
+        elif cmd == ".م32":
+            await bank_menu(event)
         else:
-            await event.answer("❌ لا توجد أوامر فرعية لهذه القائمة")
-    
-    elif data.startswith("copy_"):
-        cmd = data.replace("copy_", "")
-        await event.answer(f"✅ تم نسخ الأمر: {cmd}", alert=False)
-        await event.edit(f"**الأمر:** `.{cmd}`\n\n✅ تم النسخ، أرسل الأمر الآن")
+            await event.edit(f"**الأمر:** {cmd}\n**الوصف:** {CMD_LIST.get(cmd, '')}\n\n📌 سيتم إضافة الأوامر الفرعية قريباً")
     
     elif data == "menu":
         await main_menu(event)
@@ -184,73 +123,105 @@ async def callback_handler(event):
 # ========== قوائم الأوامر الرئيسية ==========
 @client.on(events.NewMessage(pattern=r'\.م1'))
 async def admin_menu(event):
-    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الإدارة والكروبـات 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-    buttons = []
-    for sub_cmd, desc in SUB_COMMANDS[".م1"]:
-        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
-    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
-    await event.reply(text, buttons=buttons)
+    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الإدارة والكروبـات 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+⎆ **.طرد** ➥ طرد عضو من المجموعة
+⎆ **.كتم** ➥ كتم عضو مؤقتاً
+⎆ **.رفع مشرف** ➥ ترقية عضو لمشرف
+⎆ **.تنزيل مشرف** ➥ إلغاء صلاحيات المشرف
+⎆ **.حظر** ➥ حظر عضو نهائياً
+⎆ **.الغاء حظر** ➥ إلغاء حظر عضو
+⎆ **.تثبيت** ➥ تثبيت رسالة
+⎆ **.الغاء تثبيت** ➥ إلغاء تثبيت الرسالة
+⎆ **.تنظيف** ➥ حذف رسائل محددة
+⎆ **.تعديل** ➥ تعديل رسالة مرسلة
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+𓆩 - قنـاة السـورس 𓆪
+@SSSTlF"""
+    if isinstance(event, events.CallbackQuery):
+        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
+    else:
+        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
 
 @client.on(events.NewMessage(pattern=r'\.م2'))
 async def games_menu(event):
-    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الألعـاب والترفيـه 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-    buttons = []
-    for sub_cmd, desc in SUB_COMMANDS[".م2"]:
-        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
-    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
-    await event.reply(text, buttons=buttons)
+    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - أوامـر الألعـاب والترفيـه 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+⎆ **.نرد** ➥ رمي النرد
+⎆ **.نكتة** ➥ نكتة مضحكة
+⎆ **.تويت** ➥ تغريدة عشوائية
+⎆ **.سؤال** ➥ سؤال عشوائي
+⎆ **.تخمين** ➥ لعبة تخمين الرقم
+⎆ **.حصان** ➥ لعبة الحصان
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+𓆩 - قنـاة السـورس 𓆪
+@SSSTlF"""
+    if isinstance(event, events.CallbackQuery):
+        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
+    else:
+        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
 
 @client.on(events.NewMessage(pattern=r'\.م7'))
 async def ai_menu(event):
-    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - الذكـاء الاصطناعـي والذاكـرة 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-    buttons = []
-    for sub_cmd, desc in SUB_COMMANDS[".م7"]:
-        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
-    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
-    await event.reply(text, buttons=buttons)
+    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - الذكـاء الاصطناعـي والذاكـرة 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+⎆ **.ترجم** ➥ ترجمة النص
+⎆ **.ذكي** ➥ سؤال الذكاء الاصطناعي
+⎆ **.ملخص** ➥ تلخيص النص
+⎆ **.تحليل** ➥ تحليل رسالة
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+𓆩 - قنـاة السـورس 𓆪
+@SSSTlF"""
+    if isinstance(event, events.CallbackQuery):
+        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
+    else:
+        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
 
 @client.on(events.NewMessage(pattern=r'\.م23'))
 async def tag_menu(event):
-    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - التاغ والمنشـن الجماعـي 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-    buttons = []
-    for sub_cmd, desc in SUB_COMMANDS[".م23"]:
-        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
-    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
-    await event.reply(text, buttons=buttons)
-
-@client.on(events.NewMessage(pattern=r'\.م30'))
-async def story_menu(event):
-    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - تحميـل الاستوريات 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-    buttons = []
-    for sub_cmd, desc in SUB_COMMANDS[".م30"]:
-        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
-    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
-    await event.reply(text, buttons=buttons)
+    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - التاغ والمنشـن الجماعـي 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+⎆ **.تاغ عام** ➥ تاغ جميع الأعضاء
+⎆ **.تاغ خاص** ➥ تاغ مع نص مخصص
+⎆ **.منشن** ➥ منشن مع نص
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+𓆩 - قنـاة السـورس 𓆪
+@SSSTlF"""
+    if isinstance(event, events.CallbackQuery):
+        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
+    else:
+        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
 
 @client.on(events.NewMessage(pattern=r'\.م31'))
 async def fonts_menu(event):
-    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - الخطـوط والأنمـاط التلقائيـة 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-    buttons = []
-    for sub_cmd, desc in SUB_COMMANDS[".م31"]:
-        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
-    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
-    await event.reply(text, buttons=buttons)
+    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - الخطـوط والأنمـاط التلقائيـة 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+⎆ **.خط** ➥ تحويل النص لخط مزخرف
+⎆ **.عكسي** ➥ عكس النص
+⎆ **.كبير** ➥ تكبير النص
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+𓆩 - قنـاة السـورس 𓆪
+@SSSTlF"""
+    if isinstance(event, events.CallbackQuery):
+        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
+    else:
+        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
 
 @client.on(events.NewMessage(pattern=r'\.م32'))
 async def bank_menu(event):
-    text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - البنـك وتجميـع النقـاط 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-    buttons = []
-    for sub_cmd, desc in SUB_COMMANDS[".م32"]:
-        buttons.append([Button.inline(f".{sub_cmd} ➥ {desc}", f"copy_.{sub_cmd}")])
-    buttons.append([Button.inline("↩ رجوع للقائمة الرئيسية", "menu")])
-    await event.reply(text, buttons=buttons)
+    text = """**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - البنـك وتجميـع النقـاط 𓆪**
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+⎆ **.رصيدي** ➥ عرض الرصيد
+⎆ **.تحويل** ➥ تحويل نقاط لشخص
+⎆ **.هدية** ➥ إرسال هدية لشخص
+⎆ **.توب** ➥ ترتيب الأغنياء
+⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
+𓆩 - قنـاة السـورس 𓆪
+@SSSTlF"""
+    if isinstance(event, events.CallbackQuery):
+        await event.edit(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
+    else:
+        await event.reply(text, buttons=[[Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]])
 
 # ========== أوامر الإدارة (م1) ==========
 @client.on(events.NewMessage(pattern=r'\.طرد (?:@|)([\w]+)'))
@@ -428,7 +399,6 @@ async def horse_game(event):
 @client.on(events.NewMessage(pattern=r'\.ترجم (.*)'))
 async def translate_text(event):
     text = event.pattern_match.group(1)
-    # محاكاة ترجمة بسيطة
     await event.reply(f"🌐 الترجمة التقريبية: {text} (هنا ستظهر الترجمة الفعلية عند ربطها بمكتبة ترجمة)")
 
 @client.on(events.NewMessage(pattern=r'\.ذكي (.*)'))
@@ -464,9 +434,15 @@ async def tag_all(event):
     try:
         await event.reply("👥 جارٍ تاغ جميع الأعضاء...")
         participants = await event.client.get_participants(event.chat_id)
-        mentions = "".join([f"@{p.username} " for p in participants if p.username])
+        mentions = []
+        for p in participants:
+            if p.username:
+                mentions.append(f"@{p.username}")
         if mentions:
-            await event.reply(f"👥 تاغ عام:\n{mentions}")
+            # تقسيم إلى مجموعات لتجنب الطول الزائد
+            chunks = [mentions[i:i+20] for i in range(0, len(mentions), 20)]
+            for chunk in chunks:
+                await event.reply(" ".join(chunk))
         else:
             await event.reply("❌ لا يوجد أعضاء لديهم يوزرات للتاغ")
     except Exception as e:
@@ -477,9 +453,12 @@ async def tag_special(event):
     text = event.pattern_match.group(1)
     try:
         participants = await event.client.get_participants(event.chat_id)
-        mentions = "".join([f"@{p.username} " for p in participants if p.username][:5])
+        mentions = []
+        for p in participants[:10]:
+            if p.username:
+                mentions.append(f"@{p.username}")
         if mentions:
-            await event.reply(f"📢 {text}\n{mentions}")
+            await event.reply(f"📢 {text}\n{' '.join(mentions)}")
         else:
             await event.reply("❌ لا يوجد أعضاء لديهم يوزرات")
     except Exception as e:
@@ -490,9 +469,11 @@ async def mention_text(event):
     text = event.pattern_match.group(1)
     try:
         participants = await event.client.get_participants(event.chat_id)
-        mentions = "".join([f"[{p.first_name}](tg://user?id={p.id}) " for p in participants][:5])
+        mentions = []
+        for p in participants[:10]:
+            mentions.append(f"[{p.first_name}](tg://user?id={p.id})")
         if mentions:
-            await event.reply(f"{text}\n{mentions}", parse_mode='md')
+            await event.reply(f"{text}\n{' '.join(mentions)}", parse_mode='md')
         else:
             await event.reply("❌ لا يوجد أعضاء")
     except Exception as e:
@@ -502,7 +483,6 @@ async def mention_text(event):
 @client.on(events.NewMessage(pattern=r'\.خط (.*)'))
 async def fancy_text(event):
     text = event.pattern_match.group(1)
-    # تحويل بسيط للنص (محاكاة)
     fancy = "".join([chr(ord(c) + 0x1D400) if c.isalpha() else c for c in text])
     await event.reply(f"✒️ خط مزخرف:\n{fancy}")
 
