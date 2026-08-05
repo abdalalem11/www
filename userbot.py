@@ -5,6 +5,7 @@ import random
 import re
 import json
 from datetime import datetime
+import pytz
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from telethon.tl.types import MessageMediaPhoto
@@ -19,6 +20,10 @@ if not API_ID or not API_HASH or not SESSION:
     raise Exception("❌ تأكد من تعيين API_ID, API_HASH, SESSION_STRING في المتغيرات")
 
 client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
+
+# ========== متغيرات الوقت ==========
+time_enabled = False  # تفعيل الوقت بشكل افتراضي
+timezone = pytz.timezone('Asia/Riyadh')  # توقيت السعودية الرياض
 
 # ========== قائمة الحكم والكلمات ==========
 QUOTES = [
@@ -49,9 +54,131 @@ QUOTES = [
     "★ العلم بلا عمل كالشجر بلا ثمر."
 ]
 
-# ========== أمر .ا (معلومات الحساب) ==========
-@client.on(events.NewMessage(pattern=r'\.ا$'))
+# ========== دالة التحقق من صاحب الجلسة ==========
+async def is_owner(event):
+    me = await event.client.get_me()
+    sender = await event.get_sender()
+    return sender.id == me.id
+
+# ========== معالج الرسائل لإضافة الوقت ==========
+@client.on(events.NewMessage(outgoing=True))
+async def add_time_to_message(event):
+    global time_enabled
+    
+    # التأكد من أن الرسالة مرسلة من الحساب نفسه
+    if not event.out:
+        return
+    
+    # التحقق من تفعيل الوقت
+    if not time_enabled:
+        return
+    
+    # الحصول على الوقت الحالي بتوقيت السعودية
+    now = datetime.now(timezone)
+    time_str = now.strftime("%I:%M %p")  # 12-hour format with AM/PM
+    
+    # تعديل اسم المستخدم لإضافة الوقت
+    try:
+        me = await client.get_me()
+        first_name = me.first_name or ""
+        last_name = me.last_name or ""
+        
+        # إزالة الوقت القديم إذا موجود
+        name_parts = first_name.split(' ⌚')
+        clean_name = name_parts[0]
+        
+        # الاسم الجديد مع الوقت
+        new_name = f"{clean_name} ⌚ {time_str}"
+        
+        # تغيير الاسم الأول فقط (بدون تغيير الاسم الأخير)
+        await client.edit_profile(first_name=new_name, last_name=last_name)
+        
+    except Exception as e:
+        print(f"❌ خطأ في تحديث الاسم: {e}")
+
+# ========== أمر .تفعيل الوقت ==========
+@client.on(events.NewMessage(pattern=r'^\.تفعيل الوقت$'))
+async def enable_time(event):
+    global time_enabled
+    
+    if not await is_owner(event):
+        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
+        return
+    
+    try:
+        time_enabled = True
+        
+        # الحصول على الوقت الحالي
+        now = datetime.now(timezone)
+        time_str = now.strftime("%I:%M %p")
+        
+        # تحديث الاسم فوراً
+        me = await client.get_me()
+        first_name = me.first_name or ""
+        last_name = me.last_name or ""
+        
+        # إزالة الوقت القديم إذا موجود
+        name_parts = first_name.split(' ⌚')
+        clean_name = name_parts[0]
+        
+        # الاسم الجديد مع الوقت
+        new_name = f"{clean_name} ⌚ {time_str}"
+        await client.edit_profile(first_name=new_name, last_name=last_name)
+        
+        await event.reply(f"""
+✅ **تم تفعيل عرض الوقت**
+
+🕐 الوقت الحالي: {time_str}
+📍 المنطقة: السعودية - الرياض
+👤 سيظهر الوقت بجانب اسمك
+
+✧ سورس عبود ✧
+""")
+        
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
+
+# ========== أمر .تعطيل الوقت ==========
+@client.on(events.NewMessage(pattern=r'^\.تعطيل الوقت$'))
+async def disable_time(event):
+    global time_enabled
+    
+    if not await is_owner(event):
+        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
+        return
+    
+    try:
+        time_enabled = False
+        
+        # إزالة الوقت من الاسم
+        me = await client.get_me()
+        first_name = me.first_name or ""
+        last_name = me.last_name or ""
+        
+        # إزالة الوقت من الاسم
+        name_parts = first_name.split(' ⌚')
+        clean_name = name_parts[0]
+        
+        await client.edit_profile(first_name=clean_name, last_name=last_name)
+        
+        await event.reply(f"""
+✅ **تم تعطيل عرض الوقت**
+
+🕐 تم إزالة الوقت من اسمك
+📍 المنطقة: السعودية - الرياض
+
+✧ سورس عبود ✧
+""")
+        
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
+
+# ========== أمر .ا (معلومات الحساب) - لصاحب الجلسة فقط ==========
+@client.on(events.NewMessage(pattern=r'^\.ا$'))
 async def my_info(event):
+    if not await is_owner(event):
+        return
+    
     try:
         me = await event.client.get_me()
         user_id = me.id
@@ -59,7 +186,7 @@ async def my_info(event):
         last_name = me.last_name or ""
         username = f"@{me.username}" if me.username else "لا يوجد يوزر"
         
-        now = datetime.now()
+        now = datetime.now(timezone)
         date_str = now.strftime("%Y-%m-%d %H:%M:%S")
         
         photos = await event.client.get_profile_photos(me)
@@ -72,6 +199,7 @@ async def my_info(event):
 🆔 اليوزر : {username}
 
 📅 التاريخ : {date_str}
+📍 المنطقة : السعودية - الرياض
 👨‍💻 المطور : @SSSTlF
 
 ✧ سورس عبود ✧"""
@@ -86,10 +214,12 @@ async def my_info(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .المطور (معلومات المطور) - مرة واحدة فقط ==========
-# تم إضافة شرط لمنع التكرار
+# ========== أمر .المطور - لصاحب الجلسة فقط ==========
 @client.on(events.NewMessage(pattern=r'^\.المطور$'))
 async def developer_info(event):
+    if not await is_owner(event):
+        return
+    
     try:
         me = await event.client.get_me()
         user_id = me.id
@@ -120,32 +250,35 @@ async def developer_info(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .ايدي (معرف الأيدي) ==========
+# ========== أمر .ايدي - يظهر إيدي الشخص الذي كتب الأمر ==========
 @client.on(events.NewMessage(pattern=r'^\.ايدي$'))
 async def get_id(event):
     try:
-        me = await event.client.get_me()
-        user_id = me.id
-        chat_id = event.chat_id
-        
         sender = await event.get_sender()
         sender_id = sender.id
         sender_name = sender.first_name or "لا يوجد"
+        sender_username = f"@{sender.username}" if sender.username else "لا يوجد يوزر"
         
-        photos = await event.client.get_profile_photos(me)
+        me = await event.client.get_me()
+        owner_id = me.id
         
-        now = datetime.now()
+        chat_id = event.chat_id
+        
+        photos = await event.client.get_profile_photos(sender)
+        
+        now = datetime.now(timezone)
         date_str = now.strftime("%Y-%m-%d %H:%M:%S")
         
         text = f"""
 ✧ معرف الايدي ✧
 
-👤 ايديك : {user_id}
+👤 ايديك : {sender_id}
+📛 اسمك : {sender_name}
+🆔 يوزرك : {sender_username}
 💬 ايدي المحادثة : {chat_id}
-📛 اسم المرسل : {sender_name}
-🆔 ايدي المرسل : {sender_id}
 
 ⏰ التاريخ : {date_str}
+📍 المنطقة : السعودية - الرياض
 👨‍💻 المطور : @SSSTlF
 
 ✧ سورس عبود ✧"""
@@ -160,9 +293,12 @@ async def get_id(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .بحث ==========
-@client.on(events.NewMessage(pattern=r'\.بحث (.+)'))
+# ========== أمر .بحث - لصاحب الجلسة فقط ==========
+@client.on(events.NewMessage(pattern=r'^\.بحث (.+)'))
 async def search_command(event):
+    if not await is_owner(event):
+        return
+    
     try:
         query = event.pattern_match.group(1)
         
@@ -189,9 +325,12 @@ async def search_command(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .فيديو ==========
-@client.on(events.NewMessage(pattern=r'\.فيديو (.+)'))
+# ========== أمر .فيديو - لصاحب الجلسة فقط ==========
+@client.on(events.NewMessage(pattern=r'^\.فيديو (.+)'))
 async def video_command(event):
+    if not await is_owner(event):
+        return
+    
     try:
         query = event.pattern_match.group(1)
         
@@ -217,9 +356,12 @@ async def video_command(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .اغنية ==========
-@client.on(events.NewMessage(pattern=r'\.اغنية (.+)'))
+# ========== أمر .اغنية - لصاحب الجلسة فقط ==========
+@client.on(events.NewMessage(pattern=r'^\.اغنية (.+)'))
 async def audio_command(event):
+    if not await is_owner(event):
+        return
+    
     try:
         query = event.pattern_match.group(1)
         
@@ -245,9 +387,12 @@ async def audio_command(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .كت ==========
+# ========== أمر .كت - لصاحب الجلسة فقط ==========
 @client.on(events.NewMessage(pattern=r'^\.كت$'))
 async def quote_command(event):
+    if not await is_owner(event):
+        return
+    
     try:
         quote = random.choice(QUOTES)
         text = f"""
