@@ -1,7 +1,13 @@
 services:
   - type: worker
-    name: telegram-userbot
+    name: userbot
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python userbot.py
-    plan: free
+    envVars:
+      - key: API_ID
+        value: your_api_id
+      - key: API_HASH
+        value: your_api_hash
+      - key: SESSION_STRING
+        value: your_session_string
