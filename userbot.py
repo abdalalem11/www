@@ -4,12 +4,12 @@ import os
 import random
 import re
 import json
-from datetime import datetime
-import pytz
+from datetime import datetime, timedelta
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from telethon.tl.types import MessageMediaPhoto
 from telethon.errors import FloodWaitError
+from telethon.tl.functions.account import UpdateProfileRequest
 
 # ========== إعدادات البوت ==========
 API_ID = int(os.environ.get("API_ID", 0))
@@ -23,7 +23,8 @@ client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
 
 # ========== متغيرات الوقت ==========
 time_enabled = False  # تفعيل الوقت بشكل افتراضي
-timezone = pytz.timezone('Asia/Riyadh')  # توقيت السعودية الرياض
+# توقيت السعودية (UTC+3)
+SAUDI_OFFSET = timedelta(hours=3)
 
 # ========== قائمة الحكم والكلمات ==========
 QUOTES = [
@@ -54,11 +55,32 @@ QUOTES = [
     "★ العلم بلا عمل كالشجر بلا ثمر."
 ]
 
+# ========== دالة الحصول على الوقت بتوقيت السعودية ==========
+def get_saudi_time():
+    # الحصول على الوقت الحالي بتوقيت UTC وإضافة 3 ساعات (توقيت السعودية)
+    utc_now = datetime.utcnow()
+    saudi_time = utc_now + SAUDI_OFFSET
+    return saudi_time
+
 # ========== دالة التحقق من صاحب الجلسة ==========
 async def is_owner(event):
     me = await event.client.get_me()
     sender = await event.get_sender()
     return sender.id == me.id
+
+# ========== دالة تحديث الاسم ==========
+async def update_name(first_name, last_name=None):
+    try:
+        # استخدام UpdateProfileRequest لتحديث الاسم
+        request = UpdateProfileRequest(
+            first_name=first_name,
+            last_name=last_name or ""
+        )
+        await client(request)
+        return True
+    except Exception as e:
+        print(f"❌ خطأ في تحديث الاسم: {e}")
+        return False
 
 # ========== معالج الرسائل لإضافة الوقت ==========
 @client.on(events.NewMessage(outgoing=True))
@@ -74,7 +96,7 @@ async def add_time_to_message(event):
         return
     
     # الحصول على الوقت الحالي بتوقيت السعودية
-    now = datetime.now(timezone)
+    now = get_saudi_time()
     time_str = now.strftime("%I:%M %p")  # 12-hour format with AM/PM
     
     # تعديل اسم المستخدم لإضافة الوقت
@@ -91,7 +113,7 @@ async def add_time_to_message(event):
         new_name = f"{clean_name} ⌚ {time_str}"
         
         # تغيير الاسم الأول فقط (بدون تغيير الاسم الأخير)
-        await client.edit_profile(first_name=new_name, last_name=last_name)
+        await update_name(new_name, last_name)
         
     except Exception as e:
         print(f"❌ خطأ في تحديث الاسم: {e}")
@@ -109,7 +131,7 @@ async def enable_time(event):
         time_enabled = True
         
         # الحصول على الوقت الحالي
-        now = datetime.now(timezone)
+        now = get_saudi_time()
         time_str = now.strftime("%I:%M %p")
         
         # تحديث الاسم فوراً
@@ -123,7 +145,7 @@ async def enable_time(event):
         
         # الاسم الجديد مع الوقت
         new_name = f"{clean_name} ⌚ {time_str}"
-        await client.edit_profile(first_name=new_name, last_name=last_name)
+        await update_name(new_name, last_name)
         
         await event.reply(f"""
 ✅ **تم تفعيل عرض الوقت**
@@ -159,7 +181,7 @@ async def disable_time(event):
         name_parts = first_name.split(' ⌚')
         clean_name = name_parts[0]
         
-        await client.edit_profile(first_name=clean_name, last_name=last_name)
+        await update_name(clean_name, last_name)
         
         await event.reply(f"""
 ✅ **تم تعطيل عرض الوقت**
@@ -180,16 +202,16 @@ async def my_info(event):
         return
     
     try:
-        me = await event.client.get_me()
+        me = await client.get_me()
         user_id = me.id
         first_name = me.first_name or "لا يوجد"
         last_name = me.last_name or ""
         username = f"@{me.username}" if me.username else "لا يوجد يوزر"
         
-        now = datetime.now(timezone)
+        now = get_saudi_time()
         date_str = now.strftime("%Y-%m-%d %H:%M:%S")
         
-        photos = await event.client.get_profile_photos(me)
+        photos = await client.get_profile_photos(me)
         
         text = f"""
 ✧ معلومات الحساب ✧
@@ -221,11 +243,11 @@ async def developer_info(event):
         return
     
     try:
-        me = await event.client.get_me()
+        me = await client.get_me()
         user_id = me.id
         first_name = me.first_name or "المطور"
         
-        photos = await event.client.get_profile_photos(me)
+        photos = await client.get_profile_photos(me)
         
         text = f"""
 ✧ مطور السورس ✧
@@ -259,14 +281,14 @@ async def get_id(event):
         sender_name = sender.first_name or "لا يوجد"
         sender_username = f"@{sender.username}" if sender.username else "لا يوجد يوزر"
         
-        me = await event.client.get_me()
+        me = await client.get_me()
         owner_id = me.id
         
         chat_id = event.chat_id
         
-        photos = await event.client.get_profile_photos(sender)
+        photos = await client.get_profile_photos(sender)
         
-        now = datetime.now(timezone)
+        now = get_saudi_time()
         date_str = now.strftime("%Y-%m-%d %H:%M:%S")
         
         text = f"""
