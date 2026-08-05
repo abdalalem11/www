@@ -24,6 +24,8 @@ client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
 # ========== متغيرات الوقت ==========
 time_enabled = False
 SAUDI_OFFSET = timedelta(hours=3)
+install_waiting = False  # متغير لانتظار الجلسة
+install_user_id = None   # معرف المستخدم الذي طلب التنصيب
 
 # ========== قائمة الحكم والكلمات ==========
 QUOTES = [
@@ -83,12 +85,10 @@ async def keep_alive():
     while True:
         try:
             me = await client.get_me()
-            # إرسال رسالة لنفسك كل 10 دقائق
             await client.send_message(me.id, f"🔄 البوت يعمل... {datetime.now().strftime('%H:%M')}")
             print(f"✅ تم إرسال إشارة Keep-Alive في {datetime.now()}")
         except Exception as e:
             print(f"❌ خطأ في Keep-Alive: {e}")
-            # محاولة إعادة الاتصال
             try:
                 await client.disconnect()
                 await client.start()
@@ -96,7 +96,7 @@ async def keep_alive():
             except:
                 print("❌ فشل إعادة الاتصال")
         
-        await asyncio.sleep(600)  # 10 دقائق
+        await asyncio.sleep(600)
 
 # ========== معالج الرسائل ==========
 @client.on(events.NewMessage(outgoing=True))
@@ -122,6 +122,82 @@ async def add_time_to_message(event):
         
     except Exception as e:
         print(f"❌ خطأ في تحديث الاسم: {e}")
+
+# ========== معالج استقبال الجلسة ==========
+@client.on(events.NewMessage(incoming=True))
+async def handle_session_install(event):
+    global install_waiting, install_user_id, SESSION
+    
+    # التحقق من أننا في وضع انتظار الجلسة
+    if not install_waiting:
+        return
+    
+    # التحقق من أن المرسل هو صاحب الحساب
+    me = await client.get_me()
+    if event.sender_id != me.id:
+        return
+    
+    # التحقق من أن الرسالة ليست أمراً
+    if event.text.startswith('.'):
+        return
+    
+    try:
+        # محاولة استخدام الجلسة المرسلة
+        new_session = event.text.strip()
+        
+        # اختبار الجلسة
+        test_client = TelegramClient(StringSession(new_session), API_ID, API_HASH)
+        await test_client.start()
+        
+        # الحصول على معلومات الحساب
+        me_new = await test_client.get_me()
+        
+        # إرسال تأكيد
+        await event.reply(f"""
+✅ **تم تنصيب الحساب بنجاح!**
+
+📋 المعرف: `{me_new.id}`
+📛 الاسم: {me_new.first_name}
+🆔 اليوزر: @{me_new.username if me_new.username else 'لا يوجد'}
+
+🔄 جاري إعادة تشغيل البوت بالجلسة الجديدة...
+✧ سورس عبود ✧
+""")
+        
+        # حفظ الجلسة الجديدة في المتغيرات
+        SESSION = new_session
+        
+        # إعادة تشغيل البوت
+        os.environ["SESSION_STRING"] = new_session
+        
+        # إيقاف البوت الحالي وتشغيل الجديد
+        await client.disconnect()
+        
+        # تشغيل البوت بالجلسة الجديدة
+        await restart_bot(new_session)
+        
+    except Exception as e:
+        await event.reply(f"❌ خطأ في الجلسة: {str(e)}\n\n📌 تأكد من إرسال جلسة صحيحة")
+        install_waiting = False
+        install_user_id = None
+
+# ========== وظيفة إعادة التشغيل ==========
+async def restart_bot(new_session):
+    """إعادة تشغيل البوت بالجلسة الجديدة"""
+    global client
+    
+    try:
+        # إنشاء عميل جديد
+        client = TelegramClient(StringSession(new_session), API_ID, API_HASH)
+        await client.start()
+        print("✅ تم إعادة تشغيل البوت بالجلسة الجديدة")
+        
+        # إعادة تسجيل المعالجات
+        # سيتم إعادة تشغيل البرنامج بالكامل
+        os.execv(sys.executable, ['python'] + sys.argv)
+        
+    except Exception as e:
+        print(f"❌ فشل إعادة التشغيل: {e}")
 
 # ========== أوامر الوقت ==========
 @client.on(events.NewMessage(pattern=r'^\.تفعيل الوقت$'))
@@ -193,7 +269,47 @@ async def disable_time(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== الأوامر الأخرى (مختصرة) ==========
+# ========== أمر التنصيب الجديد ==========
+@client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
+async def install_bot(event):
+    global install_waiting, install_user_id
+    
+    if not await is_owner(event):
+        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
+        return
+    
+    try:
+        # تفعيل وضع انتظار الجلسة
+        install_waiting = True
+        install_user_id = event.sender_id
+        
+        await event.reply("""
+📥 **أمر التنصيب**
+
+📌 أرسل الآن جلسة الحساب الجديد
+🔄 سيتم تبديل الحساب تلقائياً
+
+⚠️ **تنبيه:**
+• أرسل الجلسة فقط (بدون أي كلمات إضافية)
+• تأكد من صحة الجلسة
+• سيتم إعادة تشغيل البوت بعد التنصيب
+
+✧ سورس عبود ✧
+""")
+        
+        # إلغاء انتظار الجلسة بعد 60 ثانية
+        await asyncio.sleep(60)
+        if install_waiting:
+            install_waiting = False
+            install_user_id = None
+            await event.reply("⏰ انتهى وقت انتظار الجلسة، أعد استخدام الأمر للتنصيب مرة أخرى")
+        
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
+        install_waiting = False
+        install_user_id = None
+
+# ========== الأوامر الأخرى ==========
 @client.on(events.NewMessage(pattern=r'^\.ا$'))
 async def my_info(event):
     if not await is_owner(event):
@@ -432,4 +548,5 @@ async def main():
     await run_web_server()
 
 if __name__ == "__main__":
+    import sys
     asyncio.run(main())
