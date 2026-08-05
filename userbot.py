@@ -5,7 +5,7 @@ import re
 import random
 import time
 from telethon import TelegramClient, events, Button
-from telethon.sessions import StringSession  # ✅ هذا السطر هو الحل
+from telethon.sessions import StringSession
 from telethon.tl.functions.channels import InviteToChannelRequest, JoinChannelRequest
 from telethon.tl.functions.messages import AddChatUserRequest, DeleteMessagesRequest
 from telethon.tl.functions.users import GetFullUserRequest
@@ -217,11 +217,35 @@ async def joke(event):
     ]
     await event.reply(random.choice(jokes))
 
-# ========== تشغيل البوت ==========
+# ========== خادم ويب وهمي لإرضاء Render ==========
+async def run_web_server():
+    """خادم ويب بسيط لإبقاء Render سعيداً"""
+    from aiohttp import web
+    
+    async def handle(request):
+        return web.Response(text="✅ Userbot is running!")
+    
+    app = web.Application()
+    app.router.add_get('/', handle)
+    
+    port = int(os.environ.get("PORT", 10000))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"✅ خادم الويب الوهمي يعمل على المنفذ {port}")
+    
+    # إبقاء الخادم مفتوحاً
+    await asyncio.Event().wait()
+
+# ========== تشغيل البوت مع خادم الويب ==========
 async def main():
+    # تشغيل البوت في الخلفية
     await client.start()
     print("✅ البوت يعمل الآن...")
-    await client.run_until_disconnected()
+    
+    # تشغيل خادم الويب الوهمي
+    await run_web_server()
 
 if __name__ == "__main__":
     asyncio.run(main())
