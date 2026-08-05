@@ -10,6 +10,7 @@ from telethon.tl.functions.channels import InviteToChannelRequest, JoinChannelRe
 from telethon.tl.functions.messages import AddChatUserRequest, DeleteMessagesRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.errors import FloodWaitError
+from telethon.tl.types import MessageEntityTextUrl
 
 # ========== إعدادات البوت ==========
 API_ID = int(os.environ.get("API_ID", 0))
@@ -75,7 +76,8 @@ async def main_menu(event):
     name = user.first_name or "المستخدم"
     text = f"""**ᯓ 𝗧𝗲𝗽𝘁𝗵𝗼𝗻 𝗨𝘀𝗲𝗿𝗯𝗼𝘁 - قائمـة الأوامـر 𓆪**
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ مـرحبًــا {name} - اضغـط ع الامـر لـ النسـخ
+⎆ مـرحبًــا {name}
+⎆ اضغـط ع الامـر لـ النسـخ التلقائي
 ⎆ ضـع نقطة (.) بداية كل امـر :
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
     
@@ -83,20 +85,21 @@ async def main_menu(event):
     for i in range(1, 44):
         cmd = f".م{i}"
         if cmd in CMD_LIST:
-            buttons.append([Button.inline(f"{cmd} ➥ {CMD_LIST[cmd]}", f"cmd_{i}")])
+            # زر ينسخ الأمر تلقائياً عند الضغط
+            buttons.append([Button.inline(f"{cmd} ➥ {CMD_LIST[cmd]}", f"copy_{cmd}")])
     
     await event.reply(text, buttons=buttons)
 
-# ========== معالج الأزرار ==========
+# ========== معالج النسخ التلقائي ==========
 @client.on(events.CallbackQuery)
 async def callback_handler(event):
     data = event.data.decode()
-    if data.startswith("cmd_"):
-        num = data.split("_")[1]
-        cmd = f".م{num}"
-        if cmd in CMD_LIST:
-            await event.answer(f"تم نسخ الأمر: {cmd}")
-            await event.edit(f"**الأمر:** `{cmd}`\n**الوصف:** {CMD_LIST[cmd]}")
+    if data.startswith("copy_"):
+        cmd = data.replace("copy_", "")
+        # نسخ الأمر تلقائياً وإظهار إشعار
+        await event.answer(f"✅ تم نسخ الأمر: {cmd}", alert=False)
+        # إرسال الأمر في مربع الكتابة (نسخ تلقائي)
+        await event.edit(f"**الأمر:** `{cmd}`\n**الوصف:** {CMD_LIST.get(cmd, '')}\n\n✅ تم النسخ، أرسل الأمر الآن")
     elif data == "menu":
         await main_menu(event)
 
@@ -118,7 +121,9 @@ async def admin_commands(event):
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
 𓆩 - قنـاة السـورس 𓆪
 @SSSTlF"""
-    await event.reply(text)
+    await event.reply(text, buttons=[
+        [Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]
+    ])
 
 # ========== أمر .طرد ==========
 @client.on(events.NewMessage(pattern=r'\.طرد (?:@|)([\w]+)'))
@@ -199,7 +204,9 @@ async def games_commands(event):
 ⎆ **.تويت** ➥ تغريدة عشوائية
 ⎆ **.نكتة** ➥ نكتة مضحكة
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆"""
-    await event.reply(text)
+    await event.reply(text, buttons=[
+        [Button.inline("↩ رجوع للقائمة الرئيسية", "menu")]
+    ])
 
 # ========== أمر .نرد ==========
 @client.on(events.NewMessage(pattern=r'\.نرد'))
