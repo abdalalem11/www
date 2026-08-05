@@ -5,7 +5,7 @@ import re
 import random
 import time
 from telethon import TelegramClient, events, Button
-from telethon.sessions import StringSession  # ✅ تم إضافة هذا السطر
+from telethon.sessions import StringSession  # ✅ هذا السطر هو الحل
 from telethon.tl.functions.channels import InviteToChannelRequest, JoinChannelRequest
 from telethon.tl.functions.messages import AddChatUserRequest, DeleteMessagesRequest
 from telethon.tl.functions.users import GetFullUserRequest
