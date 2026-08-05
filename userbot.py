@@ -4,11 +4,12 @@ import os
 import random
 import re
 import json
+import sys
 from datetime import datetime, timedelta
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from telethon.tl.types import MessageMediaPhoto
-from telethon.errors import FloodWaitError
+from telethon.errors import FloodWaitError, PhoneNumberInvalidError, PhoneCodeInvalidError
 from telethon.tl.functions.account import UpdateProfileRequest
 
 # ========== إعدادات البوت ==========
@@ -24,8 +25,11 @@ client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
 # ========== متغيرات الوقت ==========
 time_enabled = False
 SAUDI_OFFSET = timedelta(hours=3)
-install_waiting = False  # متغير لانتظار الجلسة
-install_user_id = None   # معرف المستخدم الذي طلب التنصيب
+install_waiting = False
+install_user_id = None
+install_phone = None
+install_client = None
+install_step = "phone"  # phone, code, done
 
 # ========== قائمة الحكم والكلمات ==========
 QUOTES = [
@@ -81,7 +85,6 @@ async def update_name(first_name, last_name=None):
 
 # ========== Keep-Alive ==========
 async def keep_alive():
-    """الحفاظ على البوت يعمل بشكل مستمر"""
     while True:
         try:
             me = await client.get_me()
@@ -95,66 +98,81 @@ async def keep_alive():
                 print("✅ تم إعادة الاتصال")
             except:
                 print("❌ فشل إعادة الاتصال")
-        
         await asyncio.sleep(600)
 
 # ========== معالج الرسائل ==========
 @client.on(events.NewMessage(outgoing=True))
 async def add_time_to_message(event):
     global time_enabled
-    
     if not event.out or not time_enabled:
         return
-    
     try:
         now = get_saudi_time()
         time_str = now.strftime("%I:%M %p")
-        
         me = await client.get_me()
         first_name = me.first_name or ""
         last_name = me.last_name or ""
-        
         name_parts = first_name.split(' ⌚')
         clean_name = name_parts[0]
         new_name = f"{clean_name} ⌚ {time_str}"
-        
         await update_name(new_name, last_name)
-        
     except Exception as e:
         print(f"❌ خطأ في تحديث الاسم: {e}")
 
-# ========== معالج استقبال الجلسة ==========
+# ========== معالج التنصيب التلقائي ==========
 @client.on(events.NewMessage(incoming=True))
-async def handle_session_install(event):
-    global install_waiting, install_user_id, SESSION
+async def handle_install_input(event):
+    global install_waiting, install_user_id, install_phone, install_client, install_step
     
-    # التحقق من أننا في وضع انتظار الجلسة
     if not install_waiting:
         return
     
-    # التحقق من أن المرسل هو صاحب الحساب
     me = await client.get_me()
     if event.sender_id != me.id:
         return
     
-    # التحقق من أن الرسالة ليست أمراً
     if event.text.startswith('.'):
         return
     
     try:
-        # محاولة استخدام الجلسة المرسلة
-        new_session = event.text.strip()
-        
-        # اختبار الجلسة
-        test_client = TelegramClient(StringSession(new_session), API_ID, API_HASH)
-        await test_client.start()
-        
-        # الحصول على معلومات الحساب
-        me_new = await test_client.get_me()
-        
-        # إرسال تأكيد
-        await event.reply(f"""
-✅ **تم تنصيب الحساب بنجاح!**
+        if install_step == "phone":
+            # استقبال رقم الهاتف
+            phone = event.text.strip()
+            install_phone = phone
+            
+            # محاولة تسجيل الدخول بالرقم
+            install_client = TelegramClient(StringSession(), API_ID, API_HASH)
+            await install_client.start(phone=phone)
+            
+            # طلب رمز التحقق
+            await event.reply(f"""
+📱 **تم استقبال الرقم بنجاح!**
+
+📞 الرقم: `{phone}`
+🔑 جاري إرسال رمز التحقق...
+
+⏳ انتظر وصول الرمز ثم أرسله هنا
+✧ سورس عبود ✧
+""")
+            
+            install_step = "code"
+            
+        elif install_step == "code":
+            # استقبال رمز التحقق
+            code = event.text.strip()
+            
+            try:
+                # محاولة تسجيل الدخول بالرمز
+                await install_client.sign_in(code=code)
+                
+                # الحصول على الجلسة الجديدة
+                new_session = install_client.session.save()
+                
+                # الحصول على معلومات الحساب
+                me_new = await install_client.get_me()
+                
+                await event.reply(f"""
+✅ **تم التنصيب بنجاح!**
 
 📋 المعرف: `{me_new.id}`
 📛 الاسم: {me_new.first_name}
@@ -163,67 +181,88 @@ async def handle_session_install(event):
 🔄 جاري إعادة تشغيل البوت بالجلسة الجديدة...
 ✧ سورس عبود ✧
 """)
-        
-        # حفظ الجلسة الجديدة في المتغيرات
-        SESSION = new_session
-        
-        # إعادة تشغيل البوت
-        os.environ["SESSION_STRING"] = new_session
-        
-        # إيقاف البوت الحالي وتشغيل الجديد
-        await client.disconnect()
-        
-        # تشغيل البوت بالجلسة الجديدة
-        await restart_bot(new_session)
-        
-    except Exception as e:
-        await event.reply(f"❌ خطأ في الجلسة: {str(e)}\n\n📌 تأكد من إرسال جلسة صحيحة")
+                
+                # حفظ الجلسة الجديدة
+                os.environ["SESSION_STRING"] = new_session
+                
+                # إعادة تشغيل البوت
+                await client.disconnect()
+                await install_client.disconnect()
+                
+                # إعادة تشغيل البرنامج
+                os.execv(sys.executable, ['python'] + sys.argv)
+                
+            except PhoneCodeInvalidError:
+                await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة")
+            except Exception as e:
+                await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة باستخدام `.تنصيب`")
+                install_waiting = False
+                install_step = "phone"
+                install_user_id = None
+                
+    except PhoneNumberInvalidError:
+        await event.reply("❌ رقم الهاتف غير صحيح! تأكد من كتابته مع مفتاح الدولة\nمثال: +9665XXXXXXXX")
         install_waiting = False
+        install_step = "phone"
+        install_user_id = None
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة باستخدام `.تنصيب`")
+        install_waiting = False
+        install_step = "phone"
         install_user_id = None
 
-# ========== وظيفة إعادة التشغيل ==========
-async def restart_bot(new_session):
-    """إعادة تشغيل البوت بالجلسة الجديدة"""
-    global client
-    
-    try:
-        # إنشاء عميل جديد
-        client = TelegramClient(StringSession(new_session), API_ID, API_HASH)
-        await client.start()
-        print("✅ تم إعادة تشغيل البوت بالجلسة الجديدة")
-        
-        # إعادة تسجيل المعالجات
-        # سيتم إعادة تشغيل البرنامج بالكامل
-        os.execv(sys.executable, ['python'] + sys.argv)
-        
-    except Exception as e:
-        print(f"❌ فشل إعادة التشغيل: {e}")
-
-# ========== أوامر الوقت ==========
-@client.on(events.NewMessage(pattern=r'^\.تفعيل الوقت$'))
-async def enable_time(event):
-    global time_enabled
+# ========== أمر التنصيب الجديد ==========
+@client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
+async def install_bot(event):
+    global install_waiting, install_user_id, install_step
     
     if not await is_owner(event):
         await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
         return
     
     try:
-        time_enabled = True
+        install_waiting = True
+        install_user_id = event.sender_id
+        install_step = "phone"
         
+        await event.reply("""
+📥 **أمر التنصيب التلقائي**
+
+📌 أرسل الآن رقم هاتفك مع مفتاح الدولة
+📱 مثال: `+9665XXXXXXXX`
+
+⚠️ **تنبيه:**
+• سيتم إرسال رمز التحقق تلقائياً
+• بعد استلام الرمز، أرسله هنا
+• سيتم تبديل الحساب تلقائياً
+
+✧ سورس عبود ✧
+""")
+        
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
+        install_waiting = False
+        install_step = "phone"
+        install_user_id = None
+
+# ========== أوامر الوقت ==========
+@client.on(events.NewMessage(pattern=r'^\.تفعيل الوقت$'))
+async def enable_time(event):
+    global time_enabled
+    if not await is_owner(event):
+        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
+        return
+    try:
+        time_enabled = True
         now = get_saudi_time()
         time_str = now.strftime("%I:%M %p")
-        
         me = await client.get_me()
         first_name = me.first_name or ""
         last_name = me.last_name or ""
-        
         name_parts = first_name.split(' ⌚')
         clean_name = name_parts[0]
         new_name = f"{clean_name} ⌚ {time_str}"
-        
         await update_name(new_name, last_name)
-        
         await event.reply(f"""
 ✅ **تم تفعيل عرض الوقت**
 
@@ -233,30 +272,23 @@ async def enable_time(event):
 
 ✧ سورس عبود ✧
 """)
-        
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
 @client.on(events.NewMessage(pattern=r'^\.تعطيل الوقت$'))
 async def disable_time(event):
     global time_enabled
-    
     if not await is_owner(event):
         await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
         return
-    
     try:
         time_enabled = False
-        
         me = await client.get_me()
         first_name = me.first_name or ""
         last_name = me.last_name or ""
-        
         name_parts = first_name.split(' ⌚')
         clean_name = name_parts[0]
-        
         await update_name(clean_name, last_name)
-        
         await event.reply(f"""
 ✅ **تم تعطيل عرض الوقت**
 
@@ -265,68 +297,23 @@ async def disable_time(event):
 
 ✧ سورس عبود ✧
 """)
-        
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
-
-# ========== أمر التنصيب الجديد ==========
-@client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
-async def install_bot(event):
-    global install_waiting, install_user_id
-    
-    if not await is_owner(event):
-        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
-        return
-    
-    try:
-        # تفعيل وضع انتظار الجلسة
-        install_waiting = True
-        install_user_id = event.sender_id
-        
-        await event.reply("""
-📥 **أمر التنصيب**
-
-📌 أرسل الآن جلسة الحساب الجديد
-🔄 سيتم تبديل الحساب تلقائياً
-
-⚠️ **تنبيه:**
-• أرسل الجلسة فقط (بدون أي كلمات إضافية)
-• تأكد من صحة الجلسة
-• سيتم إعادة تشغيل البوت بعد التنصيب
-
-✧ سورس عبود ✧
-""")
-        
-        # إلغاء انتظار الجلسة بعد 60 ثانية
-        await asyncio.sleep(60)
-        if install_waiting:
-            install_waiting = False
-            install_user_id = None
-            await event.reply("⏰ انتهى وقت انتظار الجلسة، أعد استخدام الأمر للتنصيب مرة أخرى")
-        
-    except Exception as e:
-        await event.reply(f"❌ خطأ: {str(e)}")
-        install_waiting = False
-        install_user_id = None
 
 # ========== الأوامر الأخرى ==========
 @client.on(events.NewMessage(pattern=r'^\.ا$'))
 async def my_info(event):
     if not await is_owner(event):
         return
-    
     try:
         me = await client.get_me()
         user_id = me.id
         first_name = me.first_name or "لا يوجد"
         last_name = me.last_name or ""
         username = f"@{me.username}" if me.username else "لا يوجد يوزر"
-        
         now = get_saudi_time()
         date_str = now.strftime("%Y-%m-%d %H:%M:%S")
-        
         photos = await client.get_profile_photos(me)
-        
         text = f"""
 ✧ معلومات الحساب ✧
 
@@ -339,12 +326,10 @@ async def my_info(event):
 👨‍💻 المطور : @SSSTlF
 
 ✧ سورس عبود ✧"""
-        
         if photos:
             await event.reply(text, file=photos[0])
         else:
             await event.reply(text)
-            
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -352,14 +337,11 @@ async def my_info(event):
 async def developer_info(event):
     if not await is_owner(event):
         return
-    
     try:
         me = await client.get_me()
         user_id = me.id
         first_name = me.first_name or "المطور"
-        
         photos = await client.get_profile_photos(me)
-        
         text = f"""
 ✧ مطور السورس ✧
 
@@ -372,12 +354,10 @@ async def developer_info(event):
 🌟 الحالة : الحمد لله
 
 ✧ سورس عبود ✧"""
-        
         if photos:
             await event.reply(text, file=photos[0])
         else:
             await event.reply(text)
-            
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -388,14 +368,10 @@ async def get_id(event):
         sender_id = sender.id
         sender_name = sender.first_name or "لا يوجد"
         sender_username = f"@{sender.username}" if sender.username else "لا يوجد يوزر"
-        
         chat_id = event.chat_id
-        
         photos = await client.get_profile_photos(sender)
-        
         now = get_saudi_time()
         date_str = now.strftime("%Y-%m-%d %H:%M:%S")
-        
         text = f"""
 ✧ معرف الايدي ✧
 
@@ -409,12 +385,10 @@ async def get_id(event):
 👨‍💻 المطور : @SSSTlF
 
 ✧ سورس عبود ✧"""
-        
         if photos:
             await event.reply(text, file=photos[0])
         else:
             await event.reply(text)
-            
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -422,17 +396,13 @@ async def get_id(event):
 async def search_command(event):
     if not await is_owner(event):
         return
-    
     try:
         query = event.pattern_match.group(1)
-        
         if not query.strip():
             await event.reply("❌ الرجاء كتابة نص للبحث")
             return
-        
         await event.reply(f"🔍 جاري البحث عن: **{query}**...")
         await asyncio.sleep(1)
-        
         text = f"""
 ✧ نتيجة البحث ✧
 
@@ -442,7 +412,6 @@ async def search_command(event):
 
 ✧ سورس عبود ✧"""
         await event.reply(text)
-        
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -450,17 +419,13 @@ async def search_command(event):
 async def video_command(event):
     if not await is_owner(event):
         return
-    
     try:
         query = event.pattern_match.group(1)
-        
         if not query.strip():
             await event.reply("❌ الرجاء كتابة اسم الفيديو")
             return
-        
         await event.reply(f"🎬 جاري البحث عن فيديو: **{query}**...")
         await asyncio.sleep(1)
-        
         text = f"""
 ✧ نتيجة الفيديو ✧
 
@@ -469,7 +434,6 @@ async def video_command(event):
 
 ✧ سورس عبود ✧"""
         await event.reply(text)
-        
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -477,17 +441,13 @@ async def video_command(event):
 async def audio_command(event):
     if not await is_owner(event):
         return
-    
     try:
         query = event.pattern_match.group(1)
-        
         if not query.strip():
             await event.reply("❌ الرجاء كتابة اسم الأغنية")
             return
-        
         await event.reply(f"🎵 جاري البحث عن أغنية: **{query}**...")
         await asyncio.sleep(1)
-        
         text = f"""
 ✧ نتيجة الاغنية ✧
 
@@ -496,7 +456,6 @@ async def audio_command(event):
 
 ✧ سورس عبود ✧"""
         await event.reply(text)
-        
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -504,7 +463,6 @@ async def audio_command(event):
 async def quote_command(event):
     if not await is_owner(event):
         return
-    
     try:
         quote = random.choice(QUOTES)
         text = f"""
@@ -514,7 +472,6 @@ async def quote_command(event):
 
 ✧ سورس عبود ✧"""
         await event.reply(text)
-        
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -541,12 +498,8 @@ async def run_web_server():
 async def main():
     await client.start()
     print("✅ البوت يعمل الآن...")
-    
-    # تشغيل Keep-Alive في الخلفية
     asyncio.create_task(keep_alive())
-    
     await run_web_server()
 
 if __name__ == "__main__":
-    import sys
     asyncio.run(main())
