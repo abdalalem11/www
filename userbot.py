@@ -50,7 +50,7 @@ QUOTES = [
 ]
 
 # ========== أمر .ا (معلومات الحساب) ==========
-@client.on(events.NewMessage(pattern=r'\.ا'))
+@client.on(events.NewMessage(pattern=r'\.ا$'))
 async def my_info(event):
     try:
         me = await event.client.get_me()
@@ -86,8 +86,9 @@ async def my_info(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .المطور (معلومات المطور) - بدون إطار ==========
-@client.on(events.NewMessage(pattern=r'\.المطور'))
+# ========== أمر .المطور (معلومات المطور) - مرة واحدة فقط ==========
+# تم إضافة شرط لمنع التكرار
+@client.on(events.NewMessage(pattern=r'^\.المطور$'))
 async def developer_info(event):
     try:
         me = await event.client.get_me()
@@ -119,8 +120,8 @@ async def developer_info(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .ايدي (معرف الأيدي) - بدون إطار ==========
-@client.on(events.NewMessage(pattern=r'\.ايدي'))
+# ========== أمر .ايدي (معرف الأيدي) ==========
+@client.on(events.NewMessage(pattern=r'^\.ايدي$'))
 async def get_id(event):
     try:
         me = await event.client.get_me()
@@ -245,7 +246,7 @@ async def audio_command(event):
         await event.reply(f"❌ خطأ: {str(e)}")
 
 # ========== أمر .كت ==========
-@client.on(events.NewMessage(pattern=r'\.كت'))
+@client.on(events.NewMessage(pattern=r'^\.كت$'))
 async def quote_command(event):
     try:
         quote = random.choice(QUOTES)
