@@ -1,35 +1,37 @@
 from telethon import TelegramClient, events, functions, types
+from telethon.sessions import StringSession
 import asyncio
 import os
 
-API_ID = int(os.environ.get('API_ID'))
-API_HASH = os.environ.get('API_HASH')
-PHONE_NUMBER = os.environ.get('PHONE_NUMBER')
+API_ID = int(os.environ.get('API_ID', 38532428))
+API_HASH = os.environ.get('API_HASH', 'bd13b721c96184649dbbce14de78147d')
+PHONE_NUMBER = os.environ.get('PHONE_NUMBER', '+966540049081')
+SESSION_STRING = os.environ.get('userbot_session')
 
-SESSION_NAME = 'userbot_session'
-client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
-
-OWNER_ID = 0
+if SESSION_STRING:
+    client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+else:
+    client = TelegramClient('userbot_session', API_ID, API_HASH)
 
 @client.on(events.NewMessage(pattern='^.help$', outgoing=True))
 async def help_cmd(event):
-    text = """🧠 **قائمة الأوامر**:
-`.info` - معلومات الحساب
-`.stats` - إحصائيات
+    text = """🧠 **الأوامر المتاحة**:
+`.info` - معلومات حسابك
+`.stats` - عدد المحادثات
 `.read` - تعيين الكل مقروء
 `.purge` - حذف 50 رسالة
-`.join` + رابط - الانضمام
-`.leave` - المغادرة
+`.join` + رابط - الانضمام لقناة
+`.leave` - مغادرة المجموعة
 `.users` - عدد الأعضاء
 `.admins` - قائمة المدراء
-`.block` + معرف - حظر مستخدم
-`.unblock` + معرف - إلغاء حظر"""
+`.block` + ID - حظر مستخدم
+`.unblock` + ID - إلغاء الحظر"""
     await event.edit(text)
 
 @client.on(events.NewMessage(pattern='^.info$', outgoing=True))
 async def info_cmd(event):
     me = await client.get_me()
-    text = f"👤 **المعلومات**:\n- الاسم: {me.first_name}\n- المعرف: @{me.username or 'بدون'}\n- ID: `{me.id}`"
+    text = f"👤 **حسابك**:\n- الاسم: {me.first_name}\n- المعرف: @{me.username or 'بدون'}\n- ID: `{me.id}`"
     await event.edit(text)
 
 @client.on(events.NewMessage(pattern='^.stats$', outgoing=True))
@@ -43,7 +45,7 @@ async def read_all_cmd(event):
     for dialog in await client.get_dialogs():
         if dialog.unread_count:
             await client.send_read_acknowledge(dialog.id)
-    await event.edit('✅ تم')
+    await event.edit('✅ تم تعيين الكل مقروء')
 
 @client.on(events.NewMessage(pattern='^.purge(?: (\\d+))?$', outgoing=True))
 async def purge_cmd(event):
@@ -111,7 +113,9 @@ async def unblock_cmd(event):
 async def main():
     await client.start(phone=PHONE_NUMBER)
     me = await client.get_me()
-    print(f'✅ تم تشغيل UserBot\n👤 {me.first_name} (ID: {me.id})')
+    print(f'✅ تم تشغيل UserBot بنجاح')
+    print(f'👤 المالك: {me.first_name} (ID: {me.id})')
+    print('📌 الأوامر تبدأ بـ (.) نقطة - اكتب .help')
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
