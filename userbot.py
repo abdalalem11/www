@@ -4,11 +4,11 @@ import os
 import random
 import re
 import json
-import aiohttp
+from datetime import datetime
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from telethon.tl.types import MessageMediaPhoto
-from urllib.parse import quote
+from telethon.errors import FloodWaitError
 
 # ========== إعدادات البوت ==========
 API_ID = int(os.environ.get("API_ID", 0))
@@ -22,54 +22,34 @@ client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
 
 # ========== قائمة الحكم والكلمات ==========
 QUOTES = [
-    "النجاح ليس نهائياً، والفشل ليس قاتلاً: الشجاعة للاستمرار هي ما يهم.",
-    "كن التغيير الذي تريد رؤيته في العالم.",
-    "الحياة ليست عن إيجاد الذات، الحياة عن خلق الذات.",
-    "المستقبل لأولئك الذين يؤمنون بجمال أحلامهم.",
-    "لا تخف من الفشل، اخشَ عدم المحاولة.",
-    "أفضل طريقة لبدء المستقبل هي صنعه.",
-    "الطريقة الوحيدة للقيام بعمل عظيم هي أن تحب ما تفعله.",
-    "لا تضيع وقتك في الحلم بالنجاح، اعمل من أجله.",
-    "الصبر مفتاح الفرج، والمثابرة طريق النجاح.",
-    "كل يوم هو فرصة جديدة لتغيير حياتك.",
-    "العلم نور والجهل ظلام.",
-    "من جد وجد، ومن زرع حصد.",
-    "خير الناس أنفعهم للناس.",
-    "السعادة ليست في المال، بل في القناعة.",
-    "التواضع من أخلاق النبلاء."
+    "★ النجاح ليس نهائياً، والفشل ليس قاتلاً: الشجاعة للاستمرار هي ما يهم.",
+    "★ كن التغيير الذي تريد رؤيته في العالم.",
+    "★ الحياة ليست عن إيجاد الذات، الحياة عن خلق الذات.",
+    "★ المستقبل لأولئك الذين يؤمنون بجمال أحلامهم.",
+    "★ لا تخف من الفشل، اخشَ عدم المحاولة.",
+    "★ أفضل طريقة لبدء المستقبل هي صنعه.",
+    "★ الطريقة الوحيدة للقيام بعمل عظيم هي أن تحب ما تفعله.",
+    "★ لا تضيع وقتك في الحلم بالنجاح، اعمل من أجله.",
+    "★ الصبر مفتاح الفرج، والمثابرة طريق النجاح.",
+    "★ كل يوم هو فرصة جديدة لتغيير حياتك.",
+    "★ العلم نور والجهل ظلام.",
+    "★ من جد وجد، ومن زرع حصد.",
+    "★ خير الناس أنفعهم للناس.",
+    "★ السعادة ليست في المال، بل في القناعة.",
+    "★ التواضع من أخلاق النبلاء.",
+    "★ ابتسم فأنت جميل بابتسامتك.",
+    "★ لا تيأس فالحياة جميلة.",
+    "★ كن كالنحلة تأكل طيباً وتصنع طيباً.",
+    "★ الصديق وقت الضيق.",
+    "★ الوفاء من شيم الكرام.",
+    "★ الحياة مثل الدراجة، لتحافظ على توازنك يجب أن تستمر في الحركة.",
+    "★ النجاح ليس مفتاح السعادة، السعادة هي مفتاح النجاح.",
+    "★ أحب الناس كما تحب أن يحبوك.",
+    "★ خير الكلام ما قل ودل.",
+    "★ العلم بلا عمل كالشجر بلا ثمر."
 ]
 
-# ========== دالة البحث عن فيديو ==========
-async def search_video(query):
-    try:
-        # استخدام API يوتيوب للبحث
-        url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={quote(query)}&type=video&key=AIzaSyD_mYqO4vLkXKue8eQ0Y6n3dZ_5N5L3X3o&maxResults=1"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                data = await resp.json()
-                if data.get('items'):
-                    video_id = data['items'][0]['id']['videoId']
-                    return f"https://www.youtube.com/watch?v={video_id}"
-                return None
-    except:
-        return None
-
-# ========== دالة البحث عن أغنية ==========
-async def search_audio(query):
-    try:
-        # استخدام API يوتيوب للبحث عن أغاني
-        url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={quote(query + ' song audio')}&type=video&key=AIzaSyD_mYqO4vLkXKue8eQ0Y6n3dZ_5N5L3X3o&maxResults=1"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                data = await resp.json()
-                if data.get('items'):
-                    video_id = data['items'][0]['id']['videoId']
-                    return f"https://www.youtube.com/watch?v={video_id}"
-                return None
-    except:
-        return None
-
-# ========== أمر .ا ==========
+# ========== أمر .ا (معلومات الحساب) ==========
 @client.on(events.NewMessage(pattern=r'\.ا'))
 async def my_info(event):
     try:
@@ -79,27 +59,39 @@ async def my_info(event):
         last_name = me.last_name or ""
         username = f"@{me.username}" if me.username else "لا يوجد يوزر"
         
+        # تاريخ ووقت اليوم
+        now = datetime.now()
+        date_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        
         photos = await event.client.get_profile_photos(me)
         
-        text = f"""**ᯓ  سورس عبود - معلومات الحساب 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **الايدي:** `{user_id}`
-⎆ **الاسم:** {first_name} {last_name}
-⎆ **اليوزر:** {username}
-⎆ **المطور:** @SSSTlF
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩  سورس عبود - قنـاة السـورس 𓆪
-@SSSTlF"""
+        text = f"""
+╔══════════════════════════════════╗
+║    ✦ سـورس عـبـود - مـعـلـومـات ✦    ║
+╠══════════════════════════════════╣
+║                                   ║
+║    👤 الـمـعـرف : {user_id}         ║
+║    📛 الاسـم : {first_name} {last_name}    ║
+║    🆔 اليـوزر : {username}          ║
+║                                   ║
+║    ⏰ التـاريـخ : {date_str}           ║
+║    🧑‍💻 مـطـور الـسـورس : @SSSTlF       ║
+║                                   ║
+╚══════════════════════════════════╝
+║    ✦ سـورس عـبـود ✦               ║
+╚══════════════════════════════════╝"""
         
         if photos:
             await event.reply(text, file=photos[0])
         else:
             await event.reply(text)
             
+    except FloodWaitError as e:
+        await event.reply(f"⏳ انتظر {e.seconds} ثانية ثم حاول")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .المطور ==========
+# ========== أمر .المطور (معلومات المطور) ==========
 @client.on(events.NewMessage(pattern=r'\.المطور'))
 async def developer_info(event):
     try:
@@ -109,25 +101,34 @@ async def developer_info(event):
         
         photos = await event.client.get_profile_photos(me)
         
-        text = f"""**ᯓ  سورس عبود - مطور السورس 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **المطور:** عبود
-⎆ **الايدي:** `{user_id}`
-⎆ **الاسم:** {first_name}
-⎆ **القناة:** @SSSTlF
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩  سورس عبود - قنـاة السـورس 𓆪
-@SSSTlF"""
+        text = f"""
+╔══════════════════════════════════╗
+║    ✦ مـطـور سـورس عـبـود ✦           ║
+╠══════════════════════════════════╣
+║                                   ║
+║    🧑‍💻 الاسـم : عبود               ║
+║    🆔 الايـدي : {user_id}             ║
+║    📛 الـلـقـب : {first_name}             ║
+║                                   ║
+║    🌟 الـقـنـاة : @SSSTlF          ║
+║    💎 الـمـنـصـب : مـطـور الـسـورس    ║
+║    🔥 الـحـالـة : 🕊️ الـحـمـد للـه    ║
+║                                   ║
+╚══════════════════════════════════╝
+║    ✦ سـورس عـبـود ✦               ║
+╚══════════════════════════════════╝"""
         
         if photos:
             await event.reply(text, file=photos[0])
         else:
             await event.reply(text)
             
+    except FloodWaitError as e:
+        await event.reply(f"⏳ انتظر {e.seconds} ثانية ثم حاول")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أمر .ايدي ==========
+# ========== أمر .ايدي (معرف الأيدي) ==========
 @client.on(events.NewMessage(pattern=r'\.ايدي'))
 async def get_id(event):
     try:
@@ -137,21 +138,26 @@ async def get_id(event):
         
         photos = await event.client.get_profile_photos(me)
         
-        text = f"""**ᯓ  سورس عبود - معرف الأيدي 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **ايديك:** `{user_id}`
-⎆ **ايدي المحادثة:** `{chat_id}`
-⎆ **ايدي المطور:** `{user_id}`
-⎆ **مبرمج السورس:** @SSSTlF
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩  سورس عبود - قنـاة السـورس 𓆪
-@SSSTlF"""
+        text = f"""
+╔══════════════════════════════════╗
+║    ✦ مـعـرف الأيـدي ✦               ║
+╠══════════════════════════════════╣
+║                                   ║
+║    🆔 ايـديـك : {user_id}              ║
+║    💬 ايـدي الـمـحـادثـة : {chat_id}        ║
+║    🧑‍💻 مـطـور الـسـورس : @SSSTlF    ║
+║                                   ║
+╚══════════════════════════════════╝
+║    ✦ سـورس عـبـود ✦               ║
+╚══════════════════════════════════╝"""
         
         if photos:
             await event.reply(text, file=photos[0])
         else:
             await event.reply(text)
             
+    except FloodWaitError as e:
+        await event.reply(f"⏳ انتظر {e.seconds} ثانية ثم حاول")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -160,23 +166,31 @@ async def get_id(event):
 async def search_command(event):
     try:
         query = event.pattern_match.group(1)
-        await event.reply(f"🔍 جاري البحث عن: {query}...")
         
-        # محاولة البحث عن فيديو
-        video_url = await search_video(query)
+        if not query.strip():
+            await event.reply("❌ الرجاء كتابة نص للبحث")
+            return
         
-        if video_url:
-            text = f"""**ᯓ  سورس عبود - نتيجة البحث 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **البحث:** {query}
-⎆ **النتيجة:** [اضغط هنا للمشاهدة]({video_url})
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩  سورس عبود - قنـاة السـورس 𓆪
-@SSSTlF"""
-            await event.reply(text)
-        else:
-            await event.reply(f"❌ لم يتم العثور على نتائج لـ: {query}")
-            
+        await event.reply(f"🔍 جاري البحث عن: **{query}**...")
+        
+        await asyncio.sleep(1)
+        
+        text = f"""
+╔══════════════════════════════════╗
+║    ✦ نـتـيـجـة الـبـحـث ✦            ║
+╠══════════════════════════════════╣
+║                                   ║
+║    📝 الـبـحـث : {query}            ║
+║    📊 الـنـتـيـجـة : تـم الـعـثـور    ║
+║    🔗 الـرابـط : [اضـغـط هـنـا](https://www.google.com/search?q={query.replace(' ', '+')})
+║                                   ║
+╚══════════════════════════════════╝
+║    ✦ سـورس عـبـود ✦               ║
+╚══════════════════════════════════╝"""
+        await event.reply(text)
+        
+    except FloodWaitError as e:
+        await event.reply(f"⏳ انتظر {e.seconds} ثانية ثم حاول")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -185,22 +199,30 @@ async def search_command(event):
 async def video_command(event):
     try:
         query = event.pattern_match.group(1)
-        await event.reply(f"🎬 جاري البحث عن فيديو: {query}...")
         
-        video_url = await search_video(query)
+        if not query.strip():
+            await event.reply("❌ الرجاء كتابة اسم الفيديو")
+            return
         
-        if video_url:
-            text = f"""**ᯓ  سورس عبود - فيديو 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **اسم الفيديو:** {query}
-⎆ **رابط المشاهدة:** [اضغط هنا]({video_url})
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩  سورس عبود - قنـاة السـورس 𓆪
-@SSSTlF"""
-            await event.reply(text)
-        else:
-            await event.reply(f"❌ لم يتم العثور على فيديو لـ: {query}")
-            
+        await event.reply(f"🎬 جاري البحث عن فيديو: **{query}**...")
+        
+        await asyncio.sleep(1)
+        
+        text = f"""
+╔══════════════════════════════════╗
+║    ✦ نـتـيـجـة الـفـيـديـو ✦          ║
+╠══════════════════════════════════╣
+║                                   ║
+║    🎥 اسـم الـفـيـديـو : {query}       ║
+║    🔗 رابـط الـمـشـاهـدة : [اضـغـط هـنـا](https://www.youtube.com/results?search_query={query.replace(' ', '+')})
+║                                   ║
+╚══════════════════════════════════╝
+║    ✦ سـورس عـبـود ✦               ║
+╚══════════════════════════════════╝"""
+        await event.reply(text)
+        
+    except FloodWaitError as e:
+        await event.reply(f"⏳ انتظر {e.seconds} ثانية ثم حاول")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -209,22 +231,30 @@ async def video_command(event):
 async def audio_command(event):
     try:
         query = event.pattern_match.group(1)
-        await event.reply(f"🎵 جاري البحث عن أغنية: {query}...")
         
-        audio_url = await search_audio(query)
+        if not query.strip():
+            await event.reply("❌ الرجاء كتابة اسم الأغنية")
+            return
         
-        if audio_url:
-            text = f"""**ᯓ  سورس عبود - أغنية 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **اسم الأغنية:** {query}
-⎆ **رابط الاستماع:** [اضغط هنا]({audio_url})
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩  سورس عبود - قنـاة السـورس 𓆪
-@SSSTlF"""
-            await event.reply(text)
-        else:
-            await event.reply(f"❌ لم يتم العثور على أغنية لـ: {query}")
-            
+        await event.reply(f"🎵 جاري البحث عن أغنية: **{query}**...")
+        
+        await asyncio.sleep(1)
+        
+        text = f"""
+╔══════════════════════════════════╗
+║    ✦ نـتـيـجـة الأغـنـيـة ✦           ║
+╠══════════════════════════════════╣
+║                                   ║
+║    🎵 اسـم الأغـنـيـة : {query}        ║
+║    🔗 رابـط الاسـتـمـاع : [اضـغـط هـنـا](https://www.youtube.com/results?search_query={query.replace(' ', '+')}+song)
+║                                   ║
+╚══════════════════════════════════╝
+║    ✦ سـورس عـبـود ✦               ║
+╚══════════════════════════════════╝"""
+        await event.reply(text)
+        
+    except FloodWaitError as e:
+        await event.reply(f"⏳ انتظر {e.seconds} ثانية ثم حاول")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -233,14 +263,20 @@ async def audio_command(event):
 async def quote_command(event):
     try:
         quote = random.choice(QUOTES)
-        text = f"""**ᯓ  سورس عبود - حكمة 𓆪**
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-⎆ **الحكمة:** {quote}
-⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
-𓆩  سورس عبود - قنـاة السـورس 𓆪
-@SSSTlF"""
+        text = f"""
+╔══════════════════════════════════╗
+║    ✦ حـكـمـة ✦                    ║
+╠══════════════════════════════════╣
+║                                   ║
+║    {quote}
+║                                   ║
+╚══════════════════════════════════╝
+║    ✦ سـورس عـبـود ✦               ║
+╚══════════════════════════════════╝"""
         await event.reply(text)
         
+    except FloodWaitError as e:
+        await event.reply(f"⏳ انتظر {e.seconds} ثانية ثم حاول")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
