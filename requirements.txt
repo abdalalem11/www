@@ -4,3 +4,8 @@ pytz
 pyaes
 rsa
 requests
+pillow
+pySmartDL
+emoji
+prettytable
+pathlib
