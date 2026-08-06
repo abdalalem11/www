@@ -9,9 +9,10 @@ import subprocess
 from datetime import datetime, timedelta
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
-from telethon.tl.types import MessageMediaPhoto
+from telethon.tl.types import MessageMediaPhoto, ChatBannedRights
 from telethon.errors import FloodWaitError, PhoneNumberInvalidError, PhoneCodeInvalidError, SessionPasswordNeededError
 from telethon.tl.functions.account import UpdateProfileRequest
+from telethon.tl.functions.channels import EditBannedRequest
 
 # ========== تحميل الإعدادات من ملف JSON ==========
 CONFIG_FILE = "config.json"
@@ -72,14 +73,14 @@ def load_config():
             "download_video": ".تحميل فيد",
             "search_audio": ".صوتي",
             "help": ".الاوامر"
-        }
+        },
+        "locks": {}
     }
     
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-                # دمج مع الإعدادات الافتراضية
                 for key in default_config:
                     if key not in config:
                         config[key] = default_config[key]
@@ -88,7 +89,6 @@ def load_config():
             print(f"❌ خطأ في تحميل الإعدادات: {e}")
             return default_config
     else:
-        # حفظ الإعدادات الافتراضية
         try:
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, ensure_ascii=False, indent=4)
@@ -97,7 +97,6 @@ def load_config():
             print(f"❌ خطأ في حفظ الإعدادات: {e}")
         return default_config
 
-# تحميل الإعدادات
 CONFIG = load_config()
 
 # ========== إعدادات البوت ==========
@@ -157,7 +156,6 @@ async def update_name(first_name, last_name=None):
         return False
 
 def save_config():
-    """حفظ الإعدادات الحالية إلى ملف JSON"""
     try:
         CONFIG["time_enabled"] = time_enabled
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -166,6 +164,35 @@ def save_config():
     except Exception as e:
         print(f"❌ خطأ في حفظ الإعدادات: {e}")
         return False
+
+async def edit_or_reply(event, text):
+    if event.out:
+        return await event.edit(text)
+    return await event.reply(text)
+
+async def edit_delete(event, text, time=5):
+    msg = await edit_or_reply(event, text)
+    await asyncio.sleep(time)
+    await msg.delete()
+
+# ========== دوال الحماية ==========
+BANNED_RIGHTS = ChatBannedRights(
+    until_date=None,
+    view_messages=True
+)
+
+def is_locked(chat_id, lock_type):
+    locks = CONFIG.get("locks", {})
+    chat_locks = locks.get(str(chat_id), {})
+    return chat_locks.get(lock_type, False)
+
+def update_lock(chat_id, lock_type, value):
+    if "locks" not in CONFIG:
+        CONFIG["locks"] = {}
+    if str(chat_id) not in CONFIG["locks"]:
+        CONFIG["locks"][str(chat_id)] = {}
+    CONFIG["locks"][str(chat_id)][lock_type] = value
+    save_config()
 
 # ========== Keep-Alive ==========
 async def keep_alive():
@@ -186,7 +213,6 @@ async def keep_alive():
 
 # ========== دوال التحميل ==========
 async def download_audio(event, url):
-    """تحميل ملف صوتي من رابط"""
     ytd_copy = ytd.copy()
     ytd_copy["format"] = "bestaudio"
     ytd_copy["outtmpl"] = "%(id)s.m4a"
@@ -198,7 +224,6 @@ async def download_audio(event, url):
         },
         {"key": "FFmpegMetadata"}
     ]
-    
     try:
         from .. import download_yt, is_url_work
         if not await is_url_work(url):
@@ -211,7 +236,6 @@ async def download_audio(event, url):
         await event.reply(f"❌ خطأ في التحميل: {str(e)}")
 
 async def download_video(event, url):
-    """تحميل فيديو من رابط"""
     ytd_copy = ytd.copy()
     ytd_copy["format"] = "best"
     ytd_copy["outtmpl"] = "%(id)s.mp4"
@@ -219,7 +243,6 @@ async def download_video(event, url):
         {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
         {"key": "FFmpegMetadata"}
     ]
-    
     try:
         from .. import download_yt, is_url_work
         if not await is_url_work(url):
@@ -232,7 +255,6 @@ async def download_video(event, url):
         await event.reply(f"❌ خطأ في التحميل: {str(e)}")
 
 async def search_and_download_audio(event, query):
-    """البحث عن صوت وتحميله"""
     ytd_copy = ytd.copy()
     ytd_copy["format"] = "bestaudio"
     ytd_copy["outtmpl"] = "%(id)s.m4a"
@@ -244,7 +266,6 @@ async def search_and_download_audio(event, query):
         },
         {"key": "FFmpegMetadata"}
     ]
-    
     try:
         from .. import get_yt_link, download_yt
         url = get_yt_link(query, ytd_copy)
@@ -257,67 +278,240 @@ async def search_and_download_audio(event, query):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أوامر التحميل الجديدة ==========
+# ========== أوامر التحميل ==========
 @client.on(events.NewMessage(pattern=r'^\.تحميل صوتي (.+)$'))
 async def download_audio_command(event):
-    """تحميل صوتي من رابط"""
     if not await is_owner(event):
         return
-    
     url = event.pattern_match.group(1).strip()
     if not url:
         await event.reply("❌ يجب عليك وضع رابط للتحميل الصوتي")
         return
-    
     await event.reply("🎵 جاري تحميل الملف الصوتي...")
     await download_audio(event, url)
 
 @client.on(events.NewMessage(pattern=r'^\.تحميل فيد (.+)$'))
 async def download_video_command(event):
-    """تحميل فيديو من رابط"""
     if not await is_owner(event):
         return
-    
     url = event.pattern_match.group(1).strip()
     if not url:
         await event.reply("❌ يجب عليك وضع رابط لتحميل الفيديو")
         return
-    
     await event.reply("🎬 جاري تحميل الفيديو...")
     await download_video(event, url)
 
 @client.on(events.NewMessage(pattern=r'^\.صوتي(?: (.+))?$'))
 async def search_audio_command(event):
-    """تحميل صوتي بالبحث عن عنوان"""
     if not await is_owner(event):
         return
-    
     query = event.pattern_match.group(1) if event.pattern_match.group(1) else None
     if not query:
         await event.reply("❌ يجب عليك تحديد ما تريد تحميله، اكتب عنوان مع الأمر")
         return
-    
     await event.reply(f"🎵 جاري البحث عن: **{query}**...")
     await search_and_download_audio(event, query)
 
-# ========== أمر المساعدة مع الأوامر الجديدة ==========
-@client.on(events.NewMessage(pattern=r'^\.الاوامر$'))
+# ========== أوامر الحماية ==========
+@client.on(events.NewMessage(pattern=r'^\.قفل (.+)$'))
+async def lock_command(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    lock_type = event.pattern_match.group(1).strip()
+    chat_id = event.chat_id
+    
+    locks = {
+        "البوتات": "bots",
+        "المعرفات": "mentions",
+        "الدخول": "join",
+        "الاضافه": "add",
+        "التوجيه": "forward",
+        "الميديا": "media",
+        "الانلاين": "inline",
+        "الفشار": "badwords",
+        "الروابط": "links",
+        "الفارسيه": "persian"
+    }
+    
+    if lock_type == "الكل":
+        for key in locks.values():
+            update_lock(chat_id, key, True)
+        await event.reply("✅ تم قفل جميع الخيارات")
+        return
+    
+    if lock_type in locks:
+        update_lock(chat_id, locks[lock_type], True)
+        await event.reply(f"✅ تم قفل `{lock_type}`")
+    else:
+        await event.reply(f"❌ نوع القفل `{lock_type}` غير معروف")
+
+@client.on(events.NewMessage(pattern=r'^\.فتح (.+)$'))
+async def unlock_command(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    lock_type = event.pattern_match.group(1).strip()
+    chat_id = event.chat_id
+    
+    locks = {
+        "البوتات": "bots",
+        "المعرفات": "mentions",
+        "الدخول": "join",
+        "الاضافه": "add",
+        "التوجيه": "forward",
+        "الميديا": "media",
+        "الانلاين": "inline",
+        "الفشار": "badwords",
+        "الروابط": "links",
+        "الفارسيه": "persian"
+    }
+    
+    if lock_type == "الكل":
+        for key in locks.values():
+            update_lock(chat_id, key, False)
+        await event.reply("✅ تم فتح جميع الخيارات")
+        return
+    
+    if lock_type in locks:
+        update_lock(chat_id, locks[lock_type], False)
+        await event.reply(f"✅ تم فتح `{lock_type}`")
+    else:
+        await event.reply(f"❌ نوع القفل `{lock_type}` غير معروف")
+
+@client.on(events.NewMessage(pattern=r'^\.الحاله$'))
+async def locks_status(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    chat_id = event.chat_id
+    locks_status = {
+        "البوتات": is_locked(chat_id, "bots"),
+        "المعرفات": is_locked(chat_id, "mentions"),
+        "الدخول": is_locked(chat_id, "join"),
+        "الاضافه": is_locked(chat_id, "add"),
+        "التوجيه": is_locked(chat_id, "forward"),
+        "الميديا": is_locked(chat_id, "media"),
+        "الانلاين": is_locked(chat_id, "inline"),
+        "الفشار": is_locked(chat_id, "badwords"),
+        "الروابط": is_locked(chat_id, "links"),
+        "الفارسيه": is_locked(chat_id, "persian")
+    }
+    
+    text = "✧ **حالة الحماية في هذه الدردشة** ✧\n\n"
+    for name, status in locks_status.items():
+        icon = "🔒" if status else "🔓"
+        text += f"{icon} `{name}` : {'مقفل' if status else 'مفتوح'}\n"
+    
+    text += "\n✧ سورس عبود ✧"
+    await event.reply(text)
+
+@client.on(events.NewMessage(pattern=r'^\.البوتات(?: (.+))?$'))
+async def bots_command(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    action = event.pattern_match.group(1) if event.pattern_match.group(1) else "كشف"
+    
+    if action == "طرد":
+        await event.reply("🔄 جاري طرد البوتات...")
+        count = 0
+        async for user in client.iter_participants(event.chat_id):
+            if user.bot:
+                try:
+                    await client.kick_participant(event.chat_id, user.id)
+                    count += 1
+                    await asyncio.sleep(0.5)
+                except:
+                    pass
+        await event.reply(f"✅ تم طرد {count} بوت")
+    else:
+        await event.reply("🔄 جاري البحث عن البوتات...")
+        bots = []
+        async for user in client.iter_participants(event.chat_id):
+            if user.bot:
+                bots.append(f"• {user.first_name} (`{user.id}`)")
+        if bots:
+            text = f"🤖 **تم العثور على {len(bots)} بوت:**\n\n" + "\n".join(bots)
+            await event.reply(text)
+        else:
+            await event.reply("✅ لا يوجد بوتات في هذه المجموعة")
+
+# ========== مرشح الرسائل للحماية ==========
+@client.on(events.NewMessage(incoming=True))
+async def protection_filter(event):
+    if event.is_private:
+        return
+    
+    chat_id = event.chat_id
+    sender = await event.get_sender()
+    
+    # تجاهل رسائل المالك والمشرفين
+    if sender.id == (await client.get_me()).id:
+        return
+    
+    # تجاهل المشرفين
+    try:
+        permissions = await client.get_permissions(chat_id, sender.id)
+        if permissions.is_admin or permissions.is_creator:
+            return
+    except:
+        pass
+    
+    text = event.raw_text
+    
+    # فحص الفشار (كلمات بذيئة)
+    if is_locked(chat_id, "badwords"):
+        bad_words = ["خرا", "كسها", "كسمك", "كسختك", "عيري", "طيز", "سكس", "نيك", "زب", "اير", "خول", "عرص"]
+        if any(word in text for word in bad_words):
+            try:
+                await event.delete()
+                await event.reply(f"⚠️ @{sender.username or sender.id} ممنوع الألفاظ البذيئة!")
+            except:
+                pass
+    
+    # فحص الروابط
+    if is_locked(chat_id, "links"):
+        if "http" in text or "www." in text:
+            try:
+                await event.delete()
+                await event.reply(f"⚠️ @{sender.username or sender.id} ممنوع إرسال الروابط!")
+            except:
+                pass
+
+# ========== أوامر المساعدة الجديدة من ريبثون ==========
+@client.on(events.NewMessage(pattern=r'^\.مساعده$'))
 async def help_command(event):
-    """عرض جميع الأوامر المتاحة"""
+    """عرض قائمة المساعدة التفصيلية"""
     if not await is_owner(event):
         return
     
     help_text = """
-✧ **قائمة الأوامر** ✧
+✧ **قائمة الأوامر الرئيسية** ✧
 
-**⏰ أوامر الوقت:**
-◙ `.تفعيل الوقت` - تفعيل عرض الوقت في الاسم
-◙ `.تعطيل الوقت` - تعطيل عرض الوقت في الاسم
+**🛡️ أوامر الحماية:**
+◙ `.قفل <نوع>` - قفل خاصية (البوتات، المعرفات، الدخول، الاضافه، التوجيه، الميديا، الانلاين، الفشار، الروابط، الفارسيه، الكل)
+◙ `.فتح <نوع>` - فتح خاصية
+◙ `.الحاله` - عرض حالة الحماية
+◙ `.البوتات` - كشف البوتات
+◙ `.البوتات طرد` - طرد جميع البوتات
 
 **📥 أوامر التحميل:**
-◙ `.تحميل صوتي` <رابط> - تحميل صوت من رابط يوتيوب أو أي منصة
-◙ `.تحميل فيد` <رابط> - تحميل فيديو من رابط يوتيوب أو أي منصة
-◙ `.صوتي` <عنوان> - تحميل صوت بالبحث عن العنوان
+◙ `.تحميل صوتي <رابط>` - تحميل صوت من رابط
+◙ `.تحميل فيد <رابط>` - تحميل فيديو من رابط
+◙ `.صوتي <عنوان>` - تحميل صوت بالبحث
 
 **📋 أوامر المعلومات:**
 ◙ `.ا` - عرض معلومات حسابك
@@ -325,9 +519,9 @@ async def help_command(event):
 ◙ `.ايدي` - عرض معرفك ومعلومات المحادثة
 
 **🔍 أوامر البحث:**
-◙ `.بحث` <نص> - البحث في جوجل
-◙ `.فيديو` <اسم> - البحث عن فيديو في يوتيوب
-◙ `.اغنية` <اسم> - البحث عن أغنية في يوتيوب
+◙ `.بحث <نص>` - البحث في جوجل
+◙ `.فيديو <اسم>` - البحث عن فيديو
+◙ `.اغنية <اسم>` - البحث عن أغنية
 
 **📖 أوامر أخرى:**
 ◙ `.كت` - عرض حكمة عشوائية
@@ -338,201 +532,69 @@ async def help_command(event):
 """
     await event.reply(help_text)
 
-# ========== معالج الرسائل ==========
-@client.on(events.NewMessage(outgoing=True))
-async def add_time_to_message(event):
-    global time_enabled
-    if not event.out or not time_enabled:
-        return
-    try:
-        now = get_saudi_time()
-        time_str = now.strftime("%I:%M %p")
-        me = await client.get_me()
-        first_name = me.first_name or ""
-        last_name = me.last_name or ""
-        name_parts = first_name.split(' ⌚')
-        clean_name = name_parts[0]
-        new_name = f"{clean_name} ⌚ {time_str}"
-        await update_name(new_name, last_name)
-    except Exception as e:
-        print(f"❌ خطأ في تحديث الاسم: {e}")
-
-# ========== معالج التنصيب التلقائي ==========
-@client.on(events.NewMessage(incoming=True))
-async def handle_install_input(event):
-    global install_waiting, install_user_id, install_phone, install_client, install_step, install_hash, install_password
-
-    if not install_waiting:
-        return
-
-    if event.sender_id != install_user_id:
-        return
-
-    if event.text.startswith('.'):
-        return
-
-    try:
-        if install_step == "phone":
-            phone = event.text.strip()
-            install_phone = phone
-
-            install_client = TelegramClient(StringSession(), API_ID, API_HASH)
-            await install_client.connect()
-
-            try:
-                result = await install_client.send_code_request(phone)
-                install_hash = result.phone_code_hash
-                
-                await event.reply(f"""
-📱 **تم استقبال الرقم بنجاح!**
-
-📞 الرقم: `{phone}`
-🔑 جاري إرسال رمز التحقق...
-
-⏳ انتظر وصول الرمز ثم أرسله هنا
-✧ سورس عبود ✧
-""")
-                install_step = "code"
-
-            except PhoneNumberInvalidError:
-                await event.reply("❌ رقم الهاتف غير صحيح! تأكد من كتابته مع مفتاح الدولة\nمثال: +9665XXXXXXXX")
-                install_waiting = False
-                install_step = "phone"
-                await install_client.disconnect()
-            except FloodWaitError as e:
-                await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
-                install_waiting = False
-                install_step = "phone"
-                await install_client.disconnect()
-
-        elif install_step == "code":
-            code = event.text.strip()
-            
-            try:
-                await install_client.sign_in(
-                    phone=install_phone,
-                    code=code,
-                    phone_code_hash=install_hash
-                )
-                
-                me_new = await install_client.get_me()
-                new_session = install_client.session.save()
-                
-                # تحديث الإعدادات
-                CONFIG["session_string"] = new_session
-                save_config()
-                os.environ["SESSION_STRING"] = new_session
-                
-                await event.reply(f"""
-✅ **تم التنصيب بنجاح!**
-
-📋 المعرف: `{me_new.id}`
-📛 الاسم: {me_new.first_name}
-🆔 اليوزر: @{me_new.username if me_new.username else 'لا يوجد'}
-
-🔄 جاري حفظ الجلسة وإعادة التشغيل...
-✧ سورس عبود ✧
-""")
-
-                await install_client.disconnect()
-                await client.disconnect()
-                
-                subprocess.Popen([sys.executable, __file__])
-                sys.exit(0)
-
-            except SessionPasswordNeededError:
-                await event.reply("""
-🔐 **مطلوب كلمة مرور الخطوتين!**
-
-📌 أرسل الآن كلمة المرور الخاصة بحسابك
-⚠️ سيتم استخدامها لتسجيل الدخول
-✧ سورس عبود ✧
-""")
-                install_step = "password"
-                
-            except PhoneCodeInvalidError:
-                await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة")
-            except FloodWaitError as e:
-                await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
-            except Exception as e:
-                await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة باستخدام `.تنصيب`")
-                install_waiting = False
-                install_step = "phone"
-                await install_client.disconnect()
-
-        elif install_step == "password":
-            password = event.text.strip()
-            
-            try:
-                await install_client.sign_in(password=password)
-                
-                me_new = await install_client.get_me()
-                new_session = install_client.session.save()
-                
-                # تحديث الإعدادات
-                CONFIG["session_string"] = new_session
-                save_config()
-                os.environ["SESSION_STRING"] = new_session
-                
-                await event.reply(f"""
-✅ **تم التنصيب بنجاح!**
-
-📋 المعرف: `{me_new.id}`
-📛 الاسم: {me_new.first_name}
-🆔 اليوزر: @{me_new.username if me_new.username else 'لا يوجد'}
-
-🔄 جاري حفظ الجلسة وإعادة التشغيل...
-✧ سورس عبود ✧
-""")
-
-                await install_client.disconnect()
-                await client.disconnect()
-                
-                subprocess.Popen([sys.executable, __file__])
-                sys.exit(0)
-
-            except Exception as e:
-                await event.reply(f"❌ كلمة المرور غير صحيحة!\nالخطأ: {str(e)}\n\n📌 أعد المحاولة")
-                install_step = "password"
-
-    except Exception as e:
-        await event.reply(f"❌ خطأ عام: {str(e)}")
-        install_waiting = False
-        install_step = "phone"
-
-# ========== أمر التنصيب ==========
-@client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
-async def install_bot(event):
-    global install_waiting, install_user_id, install_step
-    
+# ========== أوامر الحساب ==========
+@client.on(events.NewMessage(pattern=r'^\.ايديي$'))
+async def my_id_command(event):
+    """عرض الايدي الخاص بك"""
     if not await is_owner(event):
-        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
         return
-    
+    me = await client.get_me()
+    await event.reply(f"📋 ايديك: `{me.id}`")
+
+@client.on(events.NewMessage(pattern=r'^\.اسمي$'))
+async def my_name_command(event):
+    """عرض اسمك"""
+    if not await is_owner(event):
+        return
+    me = await client.get_me()
+    await event.reply(f"📛 اسمك: {me.first_name} {me.last_name or ''}")
+
+# ========== أوامر التسلية ==========
+@client.on(events.NewMessage(pattern=r'^\.كت$'))
+async def quote_command(event):
+    if not await is_owner(event):
+        return
     try:
-        install_waiting = True
-        install_user_id = event.sender_id
-        install_step = "phone"
-        
-        await event.reply("""
-📥 **أمر التنصيب التلقائي**
+        quote = random.choice(QUOTES)
+        text = f"""
+✧ حكمة ✧
 
-📌 أرسل الآن رقم هاتفك مع مفتاح الدولة
-📱 مثال: `+201270270609`
+{quote}
 
-⚠️ **تنبيه:**
-• سيتم إرسال رمز التحقق تلقائياً
-• بعد استلام الرمز، أرسله هنا
-• إذا كان الحساب مفعل بخطوتين ستحتاج لإرسال كلمة المرور
-
-✧ سورس عبود ✧
-""")
-        
+✧ سورس عبود ✧"""
+        await event.reply(text)
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
-        install_waiting = False
-        install_step = "phone"
-        install_user_id = None
+
+@client.on(events.NewMessage(pattern=r'^\.نسبه الحب(?: (.+))?$'))
+async def love_percent(event):
+    """نسبة الحب بين شخصين"""
+    if not await is_owner(event):
+        return
+    
+    text = event.pattern_match.group(1) if event.pattern_match.group(1) else ""
+    if not text:
+        await event.reply("❌ اكتب اسمين مفصولين بفاصلة\nمثال: `.نسبه الحب احمد, سارة`")
+        return
+    
+    names = [name.strip() for name in text.split(',')]
+    if len(names) < 2:
+        await event.reply("❌ اكتب اسمين مفصولين بفاصلة")
+        return
+    
+    percent = random.randint(0, 100)
+    heart = "❤️" * (percent // 10) + "🖤" * (10 - percent // 10)
+    
+    await event.reply(f"""
+✧ **نسبة الحب** ✧
+
+💑 {names[0]} 🤝 {names[1]}
+
+💕 النسبة: **{percent}%**
+{heart}
+
+✧ سورس عبود ✧
+""")
 
 # ========== أوامر الوقت ==========
 @client.on(events.NewMessage(pattern=r'^\.تفعيل الوقت$'))
@@ -545,7 +607,6 @@ async def enable_time(event):
         time_enabled = True
         CONFIG["time_enabled"] = True
         save_config()
-        
         now = get_saudi_time()
         time_str = now.strftime("%I:%M %p")
         me = await client.get_me()
@@ -555,15 +616,7 @@ async def enable_time(event):
         clean_name = name_parts[0]
         new_name = f"{clean_name} ⌚ {time_str}"
         await update_name(new_name, last_name)
-        await event.reply(f"""
-✅ **تم تفعيل عرض الوقت**
-
-🕐 الوقت الحالي: {time_str}
-📍 المنطقة: السعودية - الرياض
-👤 سيظهر الوقت بجانب اسمك
-
-✧ سورس عبود ✧
-""")
+        await event.reply(f"✅ تم تفعيل عرض الوقت\n🕐 الوقت الحالي: {time_str}")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -577,21 +630,13 @@ async def disable_time(event):
         time_enabled = False
         CONFIG["time_enabled"] = False
         save_config()
-        
         me = await client.get_me()
         first_name = me.first_name or ""
         last_name = me.last_name or ""
         name_parts = first_name.split(' ⌚')
         clean_name = name_parts[0]
         await update_name(clean_name, last_name)
-        await event.reply(f"""
-✅ **تم تعطيل عرض الوقت**
-
-🕐 تم إزالة الوقت من اسمك
-📍 المنطقة: السعودية - الرياض
-
-✧ سورس عبود ✧
-""")
+        await event.reply("✅ تم تعطيل عرض الوقت")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
@@ -608,7 +653,6 @@ async def my_info(event):
         username = f"@{me.username}" if me.username else "لا يوجد يوزر"
         now = get_saudi_time()
         date_str = now.strftime("%Y-%m-%d %H:%M:%S")
-        photos = await client.get_profile_photos(me)
         text = f"""
 ✧ معلومات الحساب ✧
 
@@ -621,6 +665,7 @@ async def my_info(event):
 👨‍💻 المطور : @SSSTlF
 
 ✧ سورس عبود ✧"""
+        photos = await client.get_profile_photos(me)
         if photos:
             await event.reply(text, file=photos[0])
         else:
@@ -636,7 +681,6 @@ async def developer_info(event):
         me = await client.get_me()
         user_id = me.id
         first_name = me.first_name or "المطور"
-        photos = await client.get_profile_photos(me)
         text = f"""
 ✧ مطور السورس ✧
 
@@ -646,9 +690,9 @@ async def developer_info(event):
 
 📢 القناة : @SSSTlF
 💎 المنصب : مطور السورس
-🌟 الحالة : الحمد لله
 
 ✧ سورس عبود ✧"""
+        photos = await client.get_profile_photos(me)
         if photos:
             await event.reply(text, file=photos[0])
         else:
@@ -664,7 +708,6 @@ async def get_id(event):
         sender_name = sender.first_name or "لا يوجد"
         sender_username = f"@{sender.username}" if sender.username else "لا يوجد يوزر"
         chat_id = event.chat_id
-        photos = await client.get_profile_photos(sender)
         now = get_saudi_time()
         date_str = now.strftime("%Y-%m-%d %H:%M:%S")
         text = f"""
@@ -677,9 +720,9 @@ async def get_id(event):
 
 ⏰ التاريخ : {date_str}
 📍 المنطقة : السعودية - الرياض
-👨‍💻 المطور : @SSSTlF
 
 ✧ سورس عبود ✧"""
+        photos = await client.get_profile_photos(sender)
         if photos:
             await event.reply(text, file=photos[0])
         else:
@@ -754,21 +797,24 @@ async def audio_command(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-@client.on(events.NewMessage(pattern=r'^\.كت$'))
-async def quote_command(event):
-    if not await is_owner(event):
+# ========== معالج الوقت ==========
+@client.on(events.NewMessage(outgoing=True))
+async def add_time_to_message(event):
+    global time_enabled
+    if not event.out or not time_enabled:
         return
     try:
-        quote = random.choice(QUOTES)
-        text = f"""
-✧ حكمة ✧
-
-{quote}
-
-✧ سورس عبود ✧"""
-        await event.reply(text)
+        now = get_saudi_time()
+        time_str = now.strftime("%I:%M %p")
+        me = await client.get_me()
+        first_name = me.first_name or ""
+        last_name = me.last_name or ""
+        name_parts = first_name.split(' ⌚')
+        clean_name = name_parts[0]
+        new_name = f"{clean_name} ⌚ {time_str}"
+        await update_name(new_name, last_name)
     except Exception as e:
-        await event.reply(f"❌ خطأ: {str(e)}")
+        print(f"❌ خطأ في تحديث الاسم: {e}")
 
 # ========== خادم ويب ==========
 async def run_web_server():
