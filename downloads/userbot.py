@@ -303,10 +303,8 @@ API_ID = int(os.environ.get("API_ID", CONFIG.get("api_id", 0)))
 API_HASH = os.environ.get("API_HASH", CONFIG.get("api_hash", ""))
 SESSION = os.environ.get("SESSION_STRING", CONFIG.get("session_string", ""))
 
-if not API_ID or not API_HASH or not SESSION:
-    raise Exception("❌ تأكد من تعيين API_ID, API_HASH, SESSION_STRING في المتغيرات أو ملف config.json")
-
-client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
+if not API_ID or not API_HASH:
+    raise Exception("❌ تأكد من تعيين API_ID و API_HASH في المتغيرات أو ملف config.json")
 
 # ========== متغيرات عامة ==========
 time_enabled = CONFIG.get("time_enabled", False)
@@ -322,6 +320,7 @@ install_phone = None
 install_client = None
 install_step = "phone"
 install_hash = None
+install_password = None
 
 # ========== متغيرات الوقتية ==========
 digitalpic_running = False
@@ -350,6 +349,12 @@ BANNED_RIGHTS = ChatBannedRights(
     embed_links=True
 )
 UNBAN_RIGHTS = ChatBannedRights(until_date=None, view_messages=False)
+
+# ========== إنشاء عميل ==========
+if SESSION:
+    client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
+else:
+    client = TelegramClient(StringSession(), API_ID, API_HASH)
 
 # ========== دوال مساعدة ==========
 def get_saudi_time():
@@ -557,7 +562,182 @@ async def autobio_loop():
         await asyncio.sleep(CHANGE_TIME)
 
 # ================================================================
-#                   أوامر التحميل (Download)
+#                   أمر التنصيب (Install) - نسخة حقيقية
+# ================================================================
+
+@client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
+async def install_bot(event):
+    global install_waiting, install_user_id, install_step
+    
+    if not await is_owner(event):
+        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
+        return
+    
+    try:
+        install_waiting = True
+        install_user_id = event.sender_id
+        install_step = "phone"
+        
+        await event.reply("""
+📥 **أمر التنصيب التلقائي**
+
+📌 **الخطوات:**
+1️⃣ أرسل رقم هاتفك مع مفتاح الدولة
+2️⃣ انتظر رمز التحقق من تيليجرام
+3️⃣ أرسل الرمز هنا
+4️⃣ إذا كان الحساب مفعل بخطوتين، أرسل كلمة المرور
+
+📱 **مثال:** `+9665XXXXXXXX`
+
+✧ سورس عبود ✧
+""")
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
+        install_waiting = False
+
+@client.on(events.NewMessage(incoming=True))
+async def handle_install_input(event):
+    global install_waiting, install_user_id, install_phone, install_client, install_step, install_hash
+
+    if not install_waiting or event.sender_id != install_user_id or event.text.startswith('.'):
+        return
+
+    try:
+        if install_step == "phone":
+            phone = event.text.strip()
+            install_phone = phone
+            install_client = TelegramClient(StringSession(), API_ID, API_HASH)
+            await install_client.connect()
+            
+            try:
+                result = await install_client.send_code_request(phone)
+                install_hash = result.phone_code_hash
+                await event.reply(f"""
+📱 تم استقبال الرقم: `{phone}`
+
+⏳ جاري إرسال رمز التحقق إلى تيليجرام...
+📩 انتظر وصول الرمز ثم أرسله هنا
+
+✧ سورس عبود ✧
+""")
+                install_step = "code"
+
+            except PhoneNumberInvalidError:
+                await event.reply("❌ رقم الهاتف غير صحيح! تأكد من كتابته مع مفتاح الدولة\nمثال: +9665XXXXXXXX")
+                install_waiting = False
+                install_step = "phone"
+                await install_client.disconnect()
+            except FloodWaitError as e:
+                await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
+                install_waiting = False
+                install_step = "phone"
+                await install_client.disconnect()
+            except Exception as e:
+                await event.reply(f"❌ خطأ في إرسال الرمز: {str(e)}")
+                install_waiting = False
+                install_step = "phone"
+                await install_client.disconnect()
+
+        elif install_step == "code":
+            code = event.text.strip()
+            
+            try:
+                await install_client.sign_in(
+                    phone=install_phone,
+                    code=code,
+                    phone_code_hash=install_hash
+                )
+                
+                me_new = await install_client.get_me()
+                new_session = install_client.session.save()
+                
+                # تحديث الإعدادات
+                CONFIG["session_string"] = new_session
+                save_config()
+                os.environ["SESSION_STRING"] = new_session
+                
+                await event.reply(f"""
+✅ **تم التنصيب بنجاح!**
+
+📋 المعرف: `{me_new.id}`
+📛 الاسم: {me_new.first_name}
+🆔 اليوزر: @{me_new.username if me_new.username else 'لا يوجد'}
+
+🔄 جاري حفظ الجلسة وإعادة التشغيل...
+
+✧ سورس عبود ✧
+""")
+
+                await install_client.disconnect()
+                await client.disconnect()
+                
+                subprocess.Popen([sys.executable, __file__])
+                sys.exit(0)
+
+            except SessionPasswordNeededError:
+                await event.reply("""
+🔐 **مطلوب كلمة مرور الخطوتين!**
+
+📌 أرسل الآن كلمة المرور الخاصة بحسابك
+⚠️ سيتم استخدامها لتسجيل الدخول
+
+✧ سورس عبود ✧
+""")
+                install_step = "password"
+                
+            except PhoneCodeInvalidError:
+                await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة")
+            except FloodWaitError as e:
+                await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
+            except Exception as e:
+                await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة باستخدام `.تنصيب`")
+                install_waiting = False
+                install_step = "phone"
+                await install_client.disconnect()
+
+        elif install_step == "password":
+            password = event.text.strip()
+            
+            try:
+                await install_client.sign_in(password=password)
+                
+                me_new = await install_client.get_me()
+                new_session = install_client.session.save()
+                
+                # تحديث الإعدادات
+                CONFIG["session_string"] = new_session
+                save_config()
+                os.environ["SESSION_STRING"] = new_session
+                
+                await event.reply(f"""
+✅ **تم التنصيب بنجاح!**
+
+📋 المعرف: `{me_new.id}`
+📛 الاسم: {me_new.first_name}
+🆔 اليوزر: @{me_new.username if me_new.username else 'لا يوجد'}
+
+🔄 جاري حفظ الجلسة وإعادة التشغيل...
+
+✧ سورس عبود ✧
+""")
+
+                await install_client.disconnect()
+                await client.disconnect()
+                
+                subprocess.Popen([sys.executable, __file__])
+                sys.exit(0)
+
+            except Exception as e:
+                await event.reply(f"❌ كلمة المرور غير صحيحة!\nالخطأ: {str(e)}\n\n📌 أعد المحاولة")
+                install_step = "password"
+
+    except Exception as e:
+        await event.reply(f"❌ خطأ عام: {str(e)}")
+        install_waiting = False
+        install_step = "phone"
+
+# ================================================================
+#                   أوامر التحميل (Download Commands)
 # ================================================================
 
 async def download_audio(event, url):
@@ -617,10 +797,6 @@ async def search_and_download_audio(event, query):
                 await event.reply("❌ لم يتم العثور على نتيجة")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
-
-# ================================================================
-#                   أوامر التحميل (Commands)
-# ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.تحميل صوتي (.+)$'))
 async def download_audio_command(event):
@@ -796,7 +972,7 @@ async def bots_command(event):
             await event.reply("✅ لا يوجد بوتات في هذه المجموعة")
 
 # ================================================================
-#                   أوامر المجموعة (Group)
+#                   أوامر المجموعة (Group Commands)
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.تفليش$'))
@@ -1088,7 +1264,7 @@ async def tag_all(event):
     await zedevent.delete()
 
 # ================================================================
-#                   أوامر المعلومات (Info)
+#                   أوامر المعلومات (Info Commands)
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.ايدي(?: |$)(.*)'))
@@ -1151,14 +1327,6 @@ async def userinfo(event):
     except Exception:
         dc_id = "Couldn't fetch DC ID!"
     
-    # التحقق من Spamwatch
-    try:
-        # من المفترض أن يكون spamwatch معرفاً
-        sw = "**Spamwatch:** `غير متصل`"
-    except:
-        sw = "**Spamwatch:** `غير متصل`"
-    
-    # التحقق من CAS
     try:
         casurl = f"https://api.cas.chat/check?user_id={user_id}"
         data = get(casurl).json()
@@ -1174,7 +1342,6 @@ async def userinfo(event):
    • المجموعات المشتركة: `{common_chats}`
    • رقم قاعدة البيانات: `{dc_id}`
    • حساب موثق: `{replied_user.users[0].restricted}`
-   • {sw}
    • {cas}
 """
     await edit_or_reply(catevent, caption)
@@ -1234,7 +1401,7 @@ async def permalink(event):
     await edit_or_reply(event, f"⌔︙[{tag}](tg://user?id={user.id})")
 
 # ================================================================
-#                   أوامر البحث (Search)
+#                   أوامر البحث (Search Commands)
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.ا$'))
@@ -1364,7 +1531,7 @@ async def audio_command(event):
         await event.reply(f"❌ خطأ: {str(e)}")
 
 # ================================================================
-#                   أوامر التسلية (Fun)
+#                   أوامر التسلية (Fun Commands)
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.كت$'))
@@ -1413,7 +1580,7 @@ async def love_percent(event):
 """)
 
 # ================================================================
-#                   أوامر الوقت (Time)
+#                   أوامر الوقت (Time Commands)
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.تفعيل الوقت$'))
@@ -1460,7 +1627,7 @@ async def disable_time(event):
         await event.reply(f"❌ خطأ: {str(e)}")
 
 # ================================================================
-#                   أوامر الوقتية (Auto Profile)
+#                   أوامر الوقتية (Auto Profile Commands)
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.صوره وقتيه$'))
@@ -1520,98 +1687,6 @@ async def stop_auto(event):
         await event.reply("❌ خيار غير معروف\nالخيارات: صوره وقتيه, اسم وقتي, بايو وقتي")
 
 # ================================================================
-#                   أوامر التثبيت (Install)
-# ================================================================
-
-@client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
-async def install_bot(event):
-    global install_waiting, install_user_id, install_step
-    
-    if not await is_owner(event):
-        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
-        return
-    
-    try:
-        install_waiting = True
-        install_user_id = event.sender_id
-        install_step = "phone"
-        
-        await event.reply("""
-📥 **أمر التنصيب التلقائي**
-
-📌 أرسل الآن رقم هاتفك مع مفتاح الدولة
-📱 مثال: `+9665XXXXXXXX`
-
-✧ سورس عبود ✧
-""")
-    except Exception as e:
-        await event.reply(f"❌ خطأ: {str(e)}")
-        install_waiting = False
-
-@client.on(events.NewMessage(incoming=True))
-async def handle_install_input(event):
-    global install_waiting, install_user_id, install_phone, install_client, install_step, install_hash
-
-    if not install_waiting or event.sender_id != install_user_id or event.text.startswith('.'):
-        return
-
-    try:
-        if install_step == "phone":
-            phone = event.text.strip()
-            install_phone = phone
-            install_client = TelegramClient(StringSession(), API_ID, API_HASH)
-            await install_client.connect()
-            
-            try:
-                result = await install_client.send_code_request(phone)
-                install_hash = result.phone_code_hash
-                await event.reply(f"📱 تم استقبال الرقم: `{phone}`\n⏳ أرسل رمز التحقق الآن")
-                install_step = "code"
-            except Exception as e:
-                await event.reply(f"❌ خطأ: {str(e)}")
-                install_waiting = False
-
-        elif install_step == "code":
-            code = event.text.strip()
-            try:
-                await install_client.sign_in(phone=install_phone, code=code, phone_code_hash=install_hash)
-                me = await install_client.get_me()
-                new_session = install_client.session.save()
-                CONFIG["session_string"] = new_session
-                save_config()
-                await event.reply(f"✅ تم التنصيب بنجاح!\n📋 المعرف: `{me.id}`")
-                await install_client.disconnect()
-                await client.disconnect()
-                subprocess.Popen([sys.executable, __file__])
-                sys.exit(0)
-            except SessionPasswordNeededError:
-                await event.reply("🔐 مطلوب كلمة مرور الخطوتين، أرسلها الآن")
-                install_step = "password"
-            except Exception as e:
-                await event.reply(f"❌ خطأ: {str(e)}")
-                install_waiting = False
-
-        elif install_step == "password":
-            password = event.text.strip()
-            try:
-                await install_client.sign_in(password=password)
-                me = await install_client.get_me()
-                new_session = install_client.session.save()
-                CONFIG["session_string"] = new_session
-                save_config()
-                await event.reply(f"✅ تم التنصيب بنجاح!\n📋 المعرف: `{me.id}`")
-                await install_client.disconnect()
-                await client.disconnect()
-                subprocess.Popen([sys.executable, __file__])
-                sys.exit(0)
-            except Exception as e:
-                await event.reply(f"❌ كلمة المرور غير صحيحة: {str(e)}")
-
-    except Exception as e:
-        await event.reply(f"❌ خطأ عام: {str(e)}")
-        install_waiting = False
-
-# ================================================================
 #                   قائمة الأوامر (Commands List)
 # ================================================================
 
@@ -1621,7 +1696,7 @@ async def show_commands(event):
         return
     
     commands_text = """
-✧ **قائمة الأوامر** ✧
+✧ **قائمة الأوامر الرئيسية** ✧
 
 **🛡️ أوامر الحماية:**
 ◙ `.قفل <نوع>` - قفل خاصية
