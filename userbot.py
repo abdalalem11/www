@@ -13,36 +13,106 @@ from telethon.tl.types import MessageMediaPhoto
 from telethon.errors import FloodWaitError, PhoneNumberInvalidError, PhoneCodeInvalidError, SessionPasswordNeededError
 from telethon.tl.functions.account import UpdateProfileRequest
 
-# ========== إعدادات التحميل ==========
-try:
-    from .. import download_yt, get_yt_link, is_url_work, Tepthon_cmd
-except ImportError:
-    # تعريف دوال مؤقتة في حالة عدم وجود المكتبات
-    async def download_yt(jmbot, url, ytd):
-        await jmbot.eor("⚠️ مكتبة التحميل غير مثبتة")
+# ========== تحميل الإعدادات من ملف JSON ==========
+CONFIG_FILE = "config.json"
+
+def load_config():
+    """تحميل الإعدادات من ملف JSON"""
+    default_config = {
+        "api_id": 0,
+        "api_hash": "",
+        "session_string": "",
+        "time_enabled": False,
+        "saudi_offset_hours": 3,
+        "quotes": [
+            "★ النجاح ليس نهائياً، والفشل ليس قاتلاً: الشجاعة للاستمرار هي ما يهم.",
+            "★ كن التغيير الذي تريد رؤيته في العالم.",
+            "★ الحياة ليست عن إيجاد الذات، الحياة عن خلق الذات.",
+            "★ المستقبل لأولئك الذين يؤمنون بجمال أحلامهم.",
+            "★ لا تخف من الفشل، اخشَ عدم المحاولة.",
+            "★ أفضل طريقة لبدء المستقبل هي صنعه.",
+            "★ الطريقة الوحيدة للقيام بعمل عظيم هي أن تحب ما تفعله.",
+            "★ لا تضيع وقتك في الحلم بالنجاح، اعمل من أجله.",
+            "★ الصبر مفتاح الفرج، والمثابرة طريق النجاح.",
+            "★ كل يوم هو فرصة جديدة لتغيير حياتك.",
+            "★ العلم نور والجهل ظلام.",
+            "★ من جد وجد، ومن زرع حصد.",
+            "★ خير الناس أنفعهم للناس.",
+            "★ السعادة ليست في المال، بل في القناعة.",
+            "★ التواضع من أخلاق النبلاء.",
+            "★ ابتسم فأنت جميل بابتسامتك.",
+            "★ لا تيأس فالحياة جميلة.",
+            "★ كن كالنحلة تأكل طيباً وتصنع طيباً.",
+            "★ الصديق وقت الضيق.",
+            "★ الوفاء من شيم الكرام.",
+            "★ الحياة مثل الدراجة، لتحافظ على توازنك يجب أن تستمر في الحركة.",
+            "★ النجاح ليس مفتاح السعادة، السعادة هي مفتاح النجاح.",
+            "★ أحب الناس كما تحب أن يحبوك.",
+            "★ خير الكلام ما قل ودل.",
+            "★ العلم بلا عمل كالشجر بلا ثمر."
+        ],
+        "download_settings": {
+            "prefer_ffmpeg": True,
+            "addmetadata": True,
+            "geo-bypass": True,
+            "nocheckcertificate": True
+        },
+        "commands": {
+            "time_enable": ".تفعيل الوقت",
+            "time_disable": ".تعطيل الوقت",
+            "install": ".تنصيب",
+            "my_info": ".ا",
+            "developer": ".المطور",
+            "get_id": ".ايدي",
+            "search": ".بحث",
+            "video": ".فيديو",
+            "audio": ".اغنية",
+            "quote": ".كت",
+            "download_audio": ".تحميل صوتي",
+            "download_video": ".تحميل فيد",
+            "search_audio": ".صوتي",
+            "help": ".الاوامر"
+        }
+    }
     
-    def get_yt_link(query, ytd):
-        return None
-    
-    async def is_url_work(url):
-        return True
-    
-    def Tepthon_cmd(pattern):
-        return lambda func: func
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                # دمج مع الإعدادات الافتراضية
+                for key in default_config:
+                    if key not in config:
+                        config[key] = default_config[key]
+                return config
+        except Exception as e:
+            print(f"❌ خطأ في تحميل الإعدادات: {e}")
+            return default_config
+    else:
+        # حفظ الإعدادات الافتراضية
+        try:
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(default_config, f, ensure_ascii=False, indent=4)
+            print("✅ تم إنشاء ملف الإعدادات config.json")
+        except Exception as e:
+            print(f"❌ خطأ في حفظ الإعدادات: {e}")
+        return default_config
+
+# تحميل الإعدادات
+CONFIG = load_config()
 
 # ========== إعدادات البوت ==========
-API_ID = int(os.environ.get("API_ID", 0))
-API_HASH = os.environ.get("API_HASH", "")
-SESSION = os.environ.get("SESSION_STRING", "")
+API_ID = int(os.environ.get("API_ID", CONFIG.get("api_id", 0)))
+API_HASH = os.environ.get("API_HASH", CONFIG.get("api_hash", ""))
+SESSION = os.environ.get("SESSION_STRING", CONFIG.get("session_string", ""))
 
 if not API_ID or not API_HASH or not SESSION:
-    raise Exception("❌ تأكد من تعيين API_ID, API_HASH, SESSION_STRING في المتغيرات")
+    raise Exception("❌ تأكد من تعيين API_ID, API_HASH, SESSION_STRING في المتغيرات أو ملف config.json")
 
 client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
 
 # ========== متغيرات الوقت ==========
-time_enabled = False
-SAUDI_OFFSET = timedelta(hours=3)
+time_enabled = CONFIG.get("time_enabled", False)
+SAUDI_OFFSET = timedelta(hours=CONFIG.get("saudi_offset_hours", 3))
 install_waiting = False
 install_user_id = None
 install_phone = None
@@ -51,43 +121,17 @@ install_step = "phone"
 install_hash = None
 install_password = None
 
+# ========== قائمة الحكم والكلمات ==========
+QUOTES = CONFIG.get("quotes", [])
+
 # ========== إعدادات تحميل اليوتيوب ==========
 ytd = {
-    "prefer_ffmpeg": True,
-    "addmetadata": True,
-    "geo-bypass": True,
-    "nocheckcertificate": True,
+    "prefer_ffmpeg": CONFIG["download_settings"].get("prefer_ffmpeg", True),
+    "addmetadata": CONFIG["download_settings"].get("addmetadata", True),
+    "geo-bypass": CONFIG["download_settings"].get("geo-bypass", True),
+    "nocheckcertificate": CONFIG["download_settings"].get("nocheckcertificate", True),
     "postprocessors": [{"key": "FFmpegMetadata"}],
 }
-
-# ========== قائمة الحكم والكلمات ==========
-QUOTES = [
-    "★ النجاح ليس نهائياً، والفشل ليس قاتلاً: الشجاعة للاستمرار هي ما يهم.",
-    "★ كن التغيير الذي تريد رؤيته في العالم.",
-    "★ الحياة ليست عن إيجاد الذات، الحياة عن خلق الذات.",
-    "★ المستقبل لأولئك الذين يؤمنون بجمال أحلامهم.",
-    "★ لا تخف من الفشل، اخشَ عدم المحاولة.",
-    "★ أفضل طريقة لبدء المستقبل هي صنعه.",
-    "★ الطريقة الوحيدة للقيام بعمل عظيم هي أن تحب ما تفعله.",
-    "★ لا تضيع وقتك في الحلم بالنجاح، اعمل من أجله.",
-    "★ الصبر مفتاح الفرج، والمثابرة طريق النجاح.",
-    "★ كل يوم هو فرصة جديدة لتغيير حياتك.",
-    "★ العلم نور والجهل ظلام.",
-    "★ من جد وجد، ومن زرع حصد.",
-    "★ خير الناس أنفعهم للناس.",
-    "★ السعادة ليست في المال، بل في القناعة.",
-    "★ التواضع من أخلاق النبلاء.",
-    "★ ابتسم فأنت جميل بابتسامتك.",
-    "★ لا تيأس فالحياة جميلة.",
-    "★ كن كالنحلة تأكل طيباً وتصنع طيباً.",
-    "★ الصديق وقت الضيق.",
-    "★ الوفاء من شيم الكرام.",
-    "★ الحياة مثل الدراجة، لتحافظ على توازنك يجب أن تستمر في الحركة.",
-    "★ النجاح ليس مفتاح السعادة، السعادة هي مفتاح النجاح.",
-    "★ أحب الناس كما تحب أن يحبوك.",
-    "★ خير الكلام ما قل ودل.",
-    "★ العلم بلا عمل كالشجر بلا ثمر."
-]
 
 # ========== دوال مساعدة ==========
 def get_saudi_time():
@@ -110,6 +154,17 @@ async def update_name(first_name, last_name=None):
         return True
     except Exception as e:
         print(f"❌ خطأ في تحديث الاسم: {e}")
+        return False
+
+def save_config():
+    """حفظ الإعدادات الحالية إلى ملف JSON"""
+    try:
+        CONFIG["time_enabled"] = time_enabled
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(CONFIG, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        print(f"❌ خطأ في حفظ الإعدادات: {e}")
         return False
 
 # ========== Keep-Alive ==========
@@ -145,7 +200,13 @@ async def download_audio(event, url):
     ]
     
     try:
+        from .. import download_yt, is_url_work
+        if not await is_url_work(url):
+            await event.reply("❌ الرابط غير صحيح أو لا يعمل")
+            return
         await download_yt(event, url, ytd_copy)
+    except ImportError:
+        await event.reply("⚠️ مكتبة التحميل غير مثبتة\nيرجى تثبيت: pip install yt-dlp")
     except Exception as e:
         await event.reply(f"❌ خطأ في التحميل: {str(e)}")
 
@@ -160,9 +221,41 @@ async def download_video(event, url):
     ]
     
     try:
+        from .. import download_yt, is_url_work
+        if not await is_url_work(url):
+            await event.reply("❌ الرابط غير صحيح أو لا يعمل")
+            return
         await download_yt(event, url, ytd_copy)
+    except ImportError:
+        await event.reply("⚠️ مكتبة التحميل غير مثبتة\nيرجى تثبيت: pip install yt-dlp")
     except Exception as e:
         await event.reply(f"❌ خطأ في التحميل: {str(e)}")
+
+async def search_and_download_audio(event, query):
+    """البحث عن صوت وتحميله"""
+    ytd_copy = ytd.copy()
+    ytd_copy["format"] = "bestaudio"
+    ytd_copy["outtmpl"] = "%(id)s.m4a"
+    ytd_copy["postprocessors"] = [
+        {
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "m4a",
+            "preferredquality": "128",
+        },
+        {"key": "FFmpegMetadata"}
+    ]
+    
+    try:
+        from .. import get_yt_link, download_yt
+        url = get_yt_link(query, ytd_copy)
+        if not url:
+            await event.reply("❌ لم يتم العثور على الفيديو، اكتب عنوان مفصل بشكل صحيح")
+            return
+        await download_yt(event, url, ytd_copy)
+    except ImportError:
+        await event.reply("⚠️ مكتبة التحميل غير مثبتة\nيرجى تثبيت: pip install yt-dlp")
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
 
 # ========== أوامر التحميل الجديدة ==========
 @client.on(events.NewMessage(pattern=r'^\.تحميل صوتي (.+)$'))
@@ -174,12 +267,6 @@ async def download_audio_command(event):
     url = event.pattern_match.group(1).strip()
     if not url:
         await event.reply("❌ يجب عليك وضع رابط للتحميل الصوتي")
-        return
-    
-    try:
-        await is_url_work(url)
-    except Exception:
-        await event.reply("❌ الرابط غير صحيح أو لا يعمل")
         return
     
     await event.reply("🎵 جاري تحميل الملف الصوتي...")
@@ -194,12 +281,6 @@ async def download_video_command(event):
     url = event.pattern_match.group(1).strip()
     if not url:
         await event.reply("❌ يجب عليك وضع رابط لتحميل الفيديو")
-        return
-    
-    try:
-        await is_url_work(url)
-    except Exception:
-        await event.reply("❌ الرابط غير صحيح أو لا يعمل")
         return
     
     await event.reply("🎬 جاري تحميل الفيديو...")
@@ -217,29 +298,7 @@ async def search_audio_command(event):
         return
     
     await event.reply(f"🎵 جاري البحث عن: **{query}**...")
-    
-    try:
-        ytd_copy = ytd.copy()
-        ytd_copy["format"] = "bestaudio"
-        ytd_copy["outtmpl"] = "%(id)s.m4a"
-        ytd_copy["postprocessors"] = [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "m4a",
-                "preferredquality": "128",
-            },
-            {"key": "FFmpegMetadata"}
-        ]
-        
-        url = get_yt_link(query, ytd_copy)
-        if not url:
-            await event.reply("❌ لم يتم العثور على الفيديو، اكتب عنوان مفصل بشكل صحيح")
-            return
-        
-        await event.reply("🎵 جاري تحميل الملف الصوتي...")
-        await download_yt(event, url, ytd_copy)
-    except Exception as e:
-        await event.reply(f"❌ خطأ: {str(e)}")
+    await search_and_download_audio(event, query)
 
 # ========== أمر المساعدة مع الأوامر الجديدة ==========
 @client.on(events.NewMessage(pattern=r'^\.الاوامر$'))
@@ -273,6 +332,7 @@ async def help_command(event):
 **📖 أوامر أخرى:**
 ◙ `.كت` - عرض حكمة عشوائية
 ◙ `.تنصيب` - تنصيب البوت تلقائياً
+◙ `.الاوامر` - عرض هذه القائمة
 
 ✧ سورس عبود ✧
 """
@@ -358,6 +418,11 @@ async def handle_install_input(event):
                 me_new = await install_client.get_me()
                 new_session = install_client.session.save()
                 
+                # تحديث الإعدادات
+                CONFIG["session_string"] = new_session
+                save_config()
+                os.environ["SESSION_STRING"] = new_session
+                
                 await event.reply(f"""
 ✅ **تم التنصيب بنجاح!**
 
@@ -369,11 +434,6 @@ async def handle_install_input(event):
 ✧ سورس عبود ✧
 """)
 
-                with open("session.string", "w") as f:
-                    f.write(new_session)
-                
-                os.environ["SESSION_STRING"] = new_session
-                
                 await install_client.disconnect()
                 await client.disconnect()
                 
@@ -409,6 +469,11 @@ async def handle_install_input(event):
                 me_new = await install_client.get_me()
                 new_session = install_client.session.save()
                 
+                # تحديث الإعدادات
+                CONFIG["session_string"] = new_session
+                save_config()
+                os.environ["SESSION_STRING"] = new_session
+                
                 await event.reply(f"""
 ✅ **تم التنصيب بنجاح!**
 
@@ -420,11 +485,6 @@ async def handle_install_input(event):
 ✧ سورس عبود ✧
 """)
 
-                with open("session.string", "w") as f:
-                    f.write(new_session)
-                
-                os.environ["SESSION_STRING"] = new_session
-                
                 await install_client.disconnect()
                 await client.disconnect()
                 
@@ -483,6 +543,9 @@ async def enable_time(event):
         return
     try:
         time_enabled = True
+        CONFIG["time_enabled"] = True
+        save_config()
+        
         now = get_saudi_time()
         time_str = now.strftime("%I:%M %p")
         me = await client.get_me()
@@ -512,6 +575,9 @@ async def disable_time(event):
         return
     try:
         time_enabled = False
+        CONFIG["time_enabled"] = False
+        save_config()
+        
         me = await client.get_me()
         first_name = me.first_name or ""
         last_name = me.last_name or ""
@@ -727,6 +793,7 @@ async def run_web_server():
 async def main():
     await client.start()
     print("✅ البوت يعمل الآن...")
+    print(f"📁 ملف الإعدادات: {CONFIG_FILE}")
     asyncio.create_task(keep_alive())
     await run_web_server()
 
