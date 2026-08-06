@@ -562,38 +562,41 @@ async def autobio_loop():
         await asyncio.sleep(CHANGE_TIME)
 
 # ================================================================
-#                   أمر التنصيب (Install) - نسخة حقيقية
+#                   أمر التنصيب (Install) - النسخة المُعدّلة
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
 async def install_bot(event):
-    global install_waiting, install_user_id, install_step
-    
+    global install_waiting, install_user_id, install_step, install_client
+
     if not await is_owner(event):
         await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
         return
-    
-    try:
-        install_waiting = True
-        install_user_id = event.sender_id
-        install_step = "phone"
-        
-        await event.reply("""
-📥 **أمر التنصيب التلقائي**
+
+    # إنهاء أي عملية تنصيب سابقة
+    if install_client:
+        try:
+            await install_client.disconnect()
+        except:
+            pass
+
+    install_waiting = True
+    install_user_id = event.sender_id
+    install_step = "phone"
+    install_client = None
+
+    await event.reply("""
+📥 **أمر التنصيب التلقائي (نسخة مُحسّنة)**
 
 📌 **الخطوات:**
-1️⃣ أرسل رقم هاتفك مع مفتاح الدولة
-2️⃣ انتظر رمز التحقق من تيليجرام
-3️⃣ أرسل الرمز هنا
+1️⃣ أرسل رقم هاتفك مع مفتاح الدولة (مثال: +9665XXXXXXXX)
+2️⃣ انتظر رمز التحقق من تيليجرام (سيظهر في تطبيق تيليجرام لديك)
+3️⃣ أرسل الرمز المكون من 5 أرقام هنا
 4️⃣ إذا كان الحساب مفعل بخطوتين، أرسل كلمة المرور
-
-📱 **مثال:** `+9665XXXXXXXX`
 
 ✧ سورس عبود ✧
 """)
-    except Exception as e:
-        await event.reply(f"❌ خطأ: {str(e)}")
-        install_waiting = False
+
 
 @client.on(events.NewMessage(incoming=True))
 async def handle_install_input(event):
@@ -606,17 +609,27 @@ async def handle_install_input(event):
         if install_step == "phone":
             phone = event.text.strip()
             install_phone = phone
+
+            # إنشاء عميل جديد لكل عملية تنصيب
+            if install_client:
+                try:
+                    await install_client.disconnect()
+                except:
+                    pass
+
             install_client = TelegramClient(StringSession(), API_ID, API_HASH)
             await install_client.connect()
-            
+
             try:
+                # إرسال طلب الرمز إلى تيليجرام
                 result = await install_client.send_code_request(phone)
                 install_hash = result.phone_code_hash
+
                 await event.reply(f"""
 📱 تم استقبال الرقم: `{phone}`
 
 ⏳ جاري إرسال رمز التحقق إلى تيليجرام...
-📩 انتظر وصول الرمز ثم أرسله هنا
+📩 انتظر وصول الرمز في تطبيق تيليجرام ثم أرسله هنا (خلال دقيقتين)
 
 ✧ سورس عبود ✧
 """)
@@ -626,36 +639,44 @@ async def handle_install_input(event):
                 await event.reply("❌ رقم الهاتف غير صحيح! تأكد من كتابته مع مفتاح الدولة\nمثال: +9665XXXXXXXX")
                 install_waiting = False
                 install_step = "phone"
-                await install_client.disconnect()
+                if install_client:
+                    await install_client.disconnect()
+                    install_client = None
             except FloodWaitError as e:
                 await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
                 install_waiting = False
                 install_step = "phone"
-                await install_client.disconnect()
+                if install_client:
+                    await install_client.disconnect()
+                    install_client = None
             except Exception as e:
-                await event.reply(f"❌ خطأ في إرسال الرمز: {str(e)}")
+                await event.reply(f"❌ خطأ في إرسال الرمز: {str(e)}\n\n📌 تأكد من أن الرقم صحيح ومتصل بالإنترنت")
                 install_waiting = False
                 install_step = "phone"
-                await install_client.disconnect()
+                if install_client:
+                    await install_client.disconnect()
+                    install_client = None
 
         elif install_step == "code":
             code = event.text.strip()
-            
+
             try:
+                # محاولة تسجيل الدخول بالرمز
                 await install_client.sign_in(
                     phone=install_phone,
                     code=code,
                     phone_code_hash=install_hash
                 )
-                
+
+                # إذا نجح، نحصل على الجلسة ونحفظها
                 me_new = await install_client.get_me()
                 new_session = install_client.session.save()
-                
-                # تحديث الإعدادات
+
+                # تحديث الإعدادات الرئيسية
                 CONFIG["session_string"] = new_session
                 save_config()
                 os.environ["SESSION_STRING"] = new_session
-                
+
                 await event.reply(f"""
 ✅ **تم التنصيب بنجاح!**
 
@@ -668,9 +689,12 @@ async def handle_install_input(event):
 ✧ سورس عبود ✧
 """)
 
+                # إغلاق عميل التنصيب وتشغيل البوت بالجلسة الجديدة
                 await install_client.disconnect()
-                await client.disconnect()
-                
+                install_client = None
+                install_waiting = False
+
+                # إعادة تشغيل البوت
                 subprocess.Popen([sys.executable, __file__])
                 sys.exit(0)
 
@@ -684,31 +708,33 @@ async def handle_install_input(event):
 ✧ سورس عبود ✧
 """)
                 install_step = "password"
-                
+
             except PhoneCodeInvalidError:
-                await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة")
+                await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة (تأكد من كتابة 5 أرقام)")
             except FloodWaitError as e:
                 await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
             except Exception as e:
                 await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة باستخدام `.تنصيب`")
                 install_waiting = False
                 install_step = "phone"
-                await install_client.disconnect()
+                if install_client:
+                    await install_client.disconnect()
+                    install_client = None
 
         elif install_step == "password":
             password = event.text.strip()
-            
+
             try:
+                # محاولة تسجيل الدخول بكلمة المرور
                 await install_client.sign_in(password=password)
-                
+
                 me_new = await install_client.get_me()
                 new_session = install_client.session.save()
-                
-                # تحديث الإعدادات
+
                 CONFIG["session_string"] = new_session
                 save_config()
                 os.environ["SESSION_STRING"] = new_session
-                
+
                 await event.reply(f"""
 ✅ **تم التنصيب بنجاح!**
 
@@ -722,8 +748,9 @@ async def handle_install_input(event):
 """)
 
                 await install_client.disconnect()
-                await client.disconnect()
-                
+                install_client = None
+                install_waiting = False
+
                 subprocess.Popen([sys.executable, __file__])
                 sys.exit(0)
 
@@ -732,9 +759,12 @@ async def handle_install_input(event):
                 install_step = "password"
 
     except Exception as e:
-        await event.reply(f"❌ خطأ عام: {str(e)}")
+        await event.reply(f"❌ خطأ عام في التنصيب: {str(e)}\n\n📌 أعد المحاولة من البداية بـ `.تنصيب`")
         install_waiting = False
         install_step = "phone"
+        if install_client:
+            await install_client.disconnect()
+            install_client = None
 
 # ================================================================
 #                   أوامر التحميل (Download Commands)
