@@ -1,3 +1,6 @@
 telethon
 aiohttp
 pytz
+pyaes
+rsa
+requests
