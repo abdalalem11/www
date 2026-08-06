@@ -120,6 +120,7 @@ def load_config():
             "time_enable": ".تفعيل الوقت",
             "time_disable": ".تعطيل الوقت",
             "install": ".تنصيب",
+            "install_session": ".تنصيب جلسة",
             "my_info": ".ا",
             "developer": ".المطور",
             "get_id": ".ايدي",
@@ -562,7 +563,99 @@ async def autobio_loop():
         await asyncio.sleep(CHANGE_TIME)
 
 # ================================================================
-#                   أمر التنصيب (Install) - النسخة المُعدّلة
+#                   أمر التنصيب بالجلسة (Install Session)
+# ================================================================
+
+@client.on(events.NewMessage(pattern=r'^\.تنصيب جلسة$'))
+async def install_session(event):
+    if not await is_owner(event):
+        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
+        return
+    
+    await event.reply("""
+📥 **تنصيب البوت بالجلسة المستخرجة**
+
+📌 **الطريقة:**
+1️⃣ استخرج جلسة تيليجرام الخاصة بك
+2️⃣ أرسل الجلسة في رسالة جديدة (بدون نقاط أو علامات)
+3️⃣ انتظر حتى يتم التنصيب
+
+⚠️ **ملاحظة:** الجلسة تبدأ بـ `1` أو `2` وتكون طويلة
+
+✧ سورس عبود ✧
+""")
+    
+    # تفعيل انتظار الجلسة
+    global install_waiting, install_user_id, install_step
+    install_waiting = True
+    install_user_id = event.sender_id
+    install_step = "session"
+
+@client.on(events.NewMessage(incoming=True))
+async def handle_session_input(event):
+    global install_waiting, install_user_id, install_step
+    
+    if not install_waiting or event.sender_id != install_user_id or install_step != "session":
+        return
+    
+    if event.text.startswith('.'):
+        return
+    
+    session_str = event.text.strip()
+    
+    # التحقق من صحة الجلسة
+    if not session_str or len(session_str) < 20:
+        await event.reply("❌ الجلسة غير صالحة! تأكد من نسخ الجلسة كاملة")
+        install_waiting = False
+        install_step = "phone"
+        return
+    
+    try:
+        # محاولة الاتصال بالجلسة
+        temp_client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
+        await temp_client.connect()
+        
+        try:
+            me = await temp_client.get_me()
+        except Exception as e:
+            await event.reply(f"❌ الجلسة غير صالحة أو منتهية الصلاحية!\nالخطأ: {str(e)}")
+            install_waiting = False
+            install_step = "phone"
+            await temp_client.disconnect()
+            return
+        
+        # حفظ الجلسة في الإعدادات
+        CONFIG["session_string"] = session_str
+        save_config()
+        os.environ["SESSION_STRING"] = session_str
+        
+        await event.reply(f"""
+✅ **تم التنصيب بنجاح بالجلسة!**
+
+📋 المعرف: `{me.id}`
+📛 الاسم: {me.first_name}
+🆔 اليوزر: @{me.username if me.username else 'لا يوجد'}
+
+🔄 جاري إعادة التشغيل...
+
+✧ سورس عبود ✧
+""")
+        
+        await temp_client.disconnect()
+        install_waiting = False
+        install_step = "phone"
+        
+        # إعادة تشغيل البوت
+        subprocess.Popen([sys.executable, __file__])
+        sys.exit(0)
+        
+    except Exception as e:
+        await event.reply(f"❌ خطأ في التنصيب: {str(e)}\n\n📌 تأكد من نسخ الجلسة كاملة")
+        install_waiting = False
+        install_step = "phone"
+
+# ================================================================
+#                   أمر التنصيب العادي (Install)
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
@@ -586,17 +679,18 @@ async def install_bot(event):
     install_client = None
 
     await event.reply("""
-📥 **أمر التنصيب التلقائي (نسخة مُحسّنة)**
+📥 **أمر التنصيب التلقائي**
 
 📌 **الخطوات:**
 1️⃣ أرسل رقم هاتفك مع مفتاح الدولة (مثال: +9665XXXXXXXX)
-2️⃣ انتظر رمز التحقق من تيليجرام (سيظهر في تطبيق تيليجرام لديك)
+2️⃣ انتظر رمز التحقق من تيليجرام
 3️⃣ أرسل الرمز المكون من 5 أرقام هنا
 4️⃣ إذا كان الحساب مفعل بخطوتين، أرسل كلمة المرور
 
+💡 **بديل:** استخدم `.تنصيب جلسة` إذا كنت تملك جلسة مستخرجة
+
 ✧ سورس عبود ✧
 """)
-
 
 @client.on(events.NewMessage(incoming=True))
 async def handle_install_input(event):
@@ -610,7 +704,6 @@ async def handle_install_input(event):
             phone = event.text.strip()
             install_phone = phone
 
-            # إنشاء عميل جديد لكل عملية تنصيب
             if install_client:
                 try:
                     await install_client.disconnect()
@@ -621,15 +714,14 @@ async def handle_install_input(event):
             await install_client.connect()
 
             try:
-                # إرسال طلب الرمز إلى تيليجرام
                 result = await install_client.send_code_request(phone)
                 install_hash = result.phone_code_hash
 
                 await event.reply(f"""
 📱 تم استقبال الرقم: `{phone}`
 
-⏳ جاري إرسال رمز التحقق إلى تيليجرام...
-📩 انتظر وصول الرمز في تطبيق تيليجرام ثم أرسله هنا (خلال دقيقتين)
+⏳ جاري إرسال رمز التحقق...
+📩 أرسل الرمز الذي وصل إلى تيليجرام
 
 ✧ سورس عبود ✧
 """)
@@ -650,7 +742,7 @@ async def handle_install_input(event):
                     await install_client.disconnect()
                     install_client = None
             except Exception as e:
-                await event.reply(f"❌ خطأ في إرسال الرمز: {str(e)}\n\n📌 تأكد من أن الرقم صحيح ومتصل بالإنترنت")
+                await event.reply(f"❌ خطأ في إرسال الرمز: {str(e)}")
                 install_waiting = False
                 install_step = "phone"
                 if install_client:
@@ -661,18 +753,15 @@ async def handle_install_input(event):
             code = event.text.strip()
 
             try:
-                # محاولة تسجيل الدخول بالرمز
                 await install_client.sign_in(
                     phone=install_phone,
                     code=code,
                     phone_code_hash=install_hash
                 )
 
-                # إذا نجح، نحصل على الجلسة ونحفظها
                 me_new = await install_client.get_me()
                 new_session = install_client.session.save()
 
-                # تحديث الإعدادات الرئيسية
                 CONFIG["session_string"] = new_session
                 save_config()
                 os.environ["SESSION_STRING"] = new_session
@@ -684,17 +773,15 @@ async def handle_install_input(event):
 📛 الاسم: {me_new.first_name}
 🆔 اليوزر: @{me_new.username if me_new.username else 'لا يوجد'}
 
-🔄 جاري حفظ الجلسة وإعادة التشغيل...
+🔄 جاري إعادة التشغيل...
 
 ✧ سورس عبود ✧
 """)
 
-                # إغلاق عميل التنصيب وتشغيل البوت بالجلسة الجديدة
                 await install_client.disconnect()
                 install_client = None
                 install_waiting = False
 
-                # إعادة تشغيل البوت
                 subprocess.Popen([sys.executable, __file__])
                 sys.exit(0)
 
@@ -703,18 +790,17 @@ async def handle_install_input(event):
 🔐 **مطلوب كلمة مرور الخطوتين!**
 
 📌 أرسل الآن كلمة المرور الخاصة بحسابك
-⚠️ سيتم استخدامها لتسجيل الدخول
 
 ✧ سورس عبود ✧
 """)
                 install_step = "password"
 
             except PhoneCodeInvalidError:
-                await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة (تأكد من كتابة 5 أرقام)")
+                await event.reply("❌ رمز التحقق غير صحيح! أعد المحاولة")
             except FloodWaitError as e:
                 await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
             except Exception as e:
-                await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة باستخدام `.تنصيب`")
+                await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة بـ `.تنصيب`")
                 install_waiting = False
                 install_step = "phone"
                 if install_client:
@@ -725,7 +811,6 @@ async def handle_install_input(event):
             password = event.text.strip()
 
             try:
-                # محاولة تسجيل الدخول بكلمة المرور
                 await install_client.sign_in(password=password)
 
                 me_new = await install_client.get_me()
@@ -742,7 +827,7 @@ async def handle_install_input(event):
 📛 الاسم: {me_new.first_name}
 🆔 اليوزر: @{me_new.username if me_new.username else 'لا يوجد'}
 
-🔄 جاري حفظ الجلسة وإعادة التشغيل...
+🔄 جاري إعادة التشغيل...
 
 ✧ سورس عبود ✧
 """)
@@ -755,11 +840,11 @@ async def handle_install_input(event):
                 sys.exit(0)
 
             except Exception as e:
-                await event.reply(f"❌ كلمة المرور غير صحيحة!\nالخطأ: {str(e)}\n\n📌 أعد المحاولة")
+                await event.reply(f"❌ كلمة المرور غير صحيحة!\nالخطأ: {str(e)}")
                 install_step = "password"
 
     except Exception as e:
-        await event.reply(f"❌ خطأ عام في التنصيب: {str(e)}\n\n📌 أعد المحاولة من البداية بـ `.تنصيب`")
+        await event.reply(f"❌ خطأ عام: {str(e)}\n\n📌 أعد المحاولة بـ `.تنصيب`")
         install_waiting = False
         install_step = "phone"
         if install_client:
@@ -1728,6 +1813,10 @@ async def show_commands(event):
     commands_text = """
 ✧ **قائمة الأوامر الرئيسية** ✧
 
+**📥 أوامر التنصيب:**
+◙ `.تنصيب` - تنصيب البوت بالرقم والرمز
+◙ `.تنصيب جلسة` - تنصيب البوت بالجلسة المستخرجة
+
 **🛡️ أوامر الحماية:**
 ◙ `.قفل <نوع>` - قفل خاصية
 ◙ `.فتح <نوع>` - فتح خاصية
@@ -1779,10 +1868,6 @@ async def show_commands(event):
 ◙ `.كت` - حكمة عشوائية
 ◙ `.نسبه الحب <اسم1, اسم2>` - نسبة الحب
 
-**📖 أوامر أخرى:**
-◙ `.تنصيب` - تنصيب البوت تلقائياً
-◙ `.مساعده` - عرض المساعدة
-
 ✧ **سورس عبود** ✧
 """
     await event.reply(commands_text)
@@ -1794,6 +1879,10 @@ async def help_command(event):
     
     help_text = """
 ✧ **قائمة المساعدة التفصيلية** ✧
+
+**📥 أوامر التنصيب:**
+◙ `.تنصيب` - تنصيب البوت بالرقم والرمز
+◙ `.تنصيب جلسة` - تنصيب البوت بالجلسة المستخرجة (بدون رمز)
 
 **🛡️ أوامر الحماية:**
 ◙ `.قفل <نوع>` - قفل خاصية (البوتات، المعرفات، الدخول، الاضافه، التوجيه، الميديا، الانلاين، الفشار، الروابط، الفارسيه، الكل)
@@ -1847,9 +1936,6 @@ async def help_command(event):
 **🎭 أوامر التسلية:**
 ◙ `.كت` - عرض حكمة عشوائية
 ◙ `.نسبه الحب <اسم1, اسم2>` - نسبة الحب بين شخصين
-
-**📖 أوامر أخرى:**
-◙ `.تنصيب` - تنصيب البوت تلقائياً
 
 ✧ سورس عبود ✧
 """
