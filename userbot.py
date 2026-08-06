@@ -24,8 +24,7 @@ from telethon.tl.types import (
     ChannelParticipantAdmin, 
     InputPeerUser, 
     MessageEntityMentionName,
-    ChannelParticipantsKicked,
-    KeyboardButtonCallback
+    ChannelParticipantsKicked
 )
 from telethon.errors import (
     FloodWaitError, 
@@ -63,9 +62,25 @@ from telethon.tl.functions.users import GetFullUserRequest
 from telethon.utils import get_input_location
 
 # ========== مكتبات خاصة ==========
-from PIL import Image, ImageDraw, ImageFont
-from pySmartDL import SmartDL
-from requests import get
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image = None
+    ImageDraw = None
+    ImageFont = None
+    print("⚠️ Pillow غير مثبت - سيتم تعطيل ميزات الصور")
+
+try:
+    from pySmartDL import SmartDL
+except ImportError:
+    SmartDL = None
+    print("⚠️ pySmartDL غير مثبت")
+
+try:
+    from requests import get
+except ImportError:
+    get = None
+    print("⚠️ requests غير مثبت")
 
 # ========== ملفات الإعدادات ==========
 CONFIG_FILE = "config.json"
@@ -306,7 +321,10 @@ API_HASH = os.environ.get("API_HASH", CONFIG.get("api_hash", ""))
 SESSION = os.environ.get("SESSION_STRING", CONFIG.get("session_string", ""))
 
 if not API_ID or not API_HASH:
-    raise Exception("❌ تأكد من تعيين API_ID و API_HASH في المتغيرات أو ملف config.json")
+    print("❌ تأكد من تعيين API_ID و API_HASH في المتغيرات أو ملف config.json")
+    print("⚠️ سيتم استخدام القيم الافتراضية للتجربة")
+    API_ID = 2040
+    API_HASH = "b18441a1ff607e10a989891a5462e627"
 
 # ========== متغيرات عامة ==========
 time_enabled = CONFIG.get("time_enabled", False)
@@ -365,9 +383,12 @@ def get_saudi_time():
     return saudi_time
 
 async def is_owner(event):
-    me = await event.client.get_me()
-    sender = await event.get_sender()
-    return sender.id == me.id
+    try:
+        me = await event.client.get_me()
+        sender = await event.get_sender()
+        return sender.id == me.id
+    except:
+        return False
 
 async def update_name(first_name, last_name=None):
     try:
@@ -480,6 +501,95 @@ async def fetch_info(replied_user, event):
     return photo, caption
 
 # ================================================================
+#                        حلقات الخلفية
+# ================================================================
+
+async def keep_alive():
+    """إبقاء البوت نشطاً"""
+    while True:
+        try:
+            me = await client.get_me()
+            await client.send_message(me.id, f"🔄 البوت يعمل... {datetime.now().strftime('%H:%M')}")
+            print(f"✅ تم إرسال إشارة Keep-Alive في {datetime.now()}")
+        except Exception as e:
+            print(f"❌ خطأ في Keep-Alive: {e}")
+            try:
+                await client.disconnect()
+                await client.start()
+                print("✅ تم إعادة الاتصال")
+            except:
+                print("❌ فشل إعادة الاتصال")
+        await asyncio.sleep(600)
+
+async def digitalpic_loop():
+    """حلقة الصورة الوقتية"""
+    global digitalpic_running
+    if Image is None:
+        print("❌ Pillow غير مثبت - تعطيل الصورة الوقتية")
+        digitalpic_running = False
+        return
+    
+    i = 0
+    while digitalpic_running:
+        digitalpic_path = gvarstatus("DIGITAL_PIC_PATH") or "digital_pic.png"
+        if not os.path.exists(digitalpic_path):
+            print("❌ الصورة الوقتية غير موجودة")
+            await asyncio.sleep(CHANGE_TIME)
+            continue
+        
+        autophoto_path = "photo_pfp.png"
+        shutil.copy(digitalpic_path, autophoto_path)
+        current_time = datetime.now().strftime("%I:%M")
+        
+        try:
+            img = Image.open(autophoto_path)
+            drawn_text = ImageDraw.Draw(img)
+            fnt = ImageFont.truetype("DejaVuSansMono.ttf", 35)
+            drawn_text.text((140, 70), current_time, font=fnt, fill=(255, 255, 255))
+            img.save(autophoto_path)
+            
+            file = await client.upload_file(autophoto_path)
+            if i > 0:
+                await client(functions.photos.DeletePhotosRequest(
+                    await client.get_profile_photos("me", limit=1)
+                ))
+            i += 1
+            await client(functions.photos.UploadProfilePhotoRequest(file))
+            os.remove(autophoto_path)
+        except Exception as e:
+            print(f"❌ خطأ في الصورة الوقتية: {e}")
+        
+        await asyncio.sleep(CHANGE_TIME)
+
+async def autoname_loop():
+    """حلقة الاسم الوقتي"""
+    global autoname_running
+    while autoname_running:
+        HM = time.strftime("%I:%M")
+        name = f"⏰ {HM}"
+        try:
+            await client(functions.account.UpdateProfileRequest(last_name=name))
+        except FloodWaitError as ex:
+            await asyncio.sleep(ex.seconds)
+        except Exception as e:
+            print(f"❌ خطأ في الاسم الوقتي: {e}")
+        await asyncio.sleep(CHANGE_TIME)
+
+async def autobio_loop():
+    """حلقة البايو الوقتي"""
+    global autobio_running
+    while autobio_running:
+        HM = time.strftime("%I:%M")
+        bio = f"الحمد لله ⏐ {HM}"
+        try:
+            await client(functions.account.UpdateProfileRequest(about=bio))
+        except FloodWaitError as ex:
+            await asyncio.sleep(ex.seconds)
+        except Exception as e:
+            print(f"❌ خطأ في البايو الوقتي: {e}")
+        await asyncio.sleep(CHANGE_TIME)
+
+# ================================================================
 #                   دوال الأزرار (Buttons Functions)
 # ================================================================
 
@@ -488,7 +598,6 @@ def create_command_buttons(commands_list, columns=2):
     buttons = []
     row = []
     for i, cmd in enumerate(commands_list):
-        # كل زر يرسل الأمر مباشرة عند الضغط عليه
         row.append(Button.inline(f"📋 {cmd}", data=f"cmd:{cmd}"))
         if len(row) == columns:
             buttons.append(row)
@@ -507,12 +616,9 @@ async def callback_handler(event):
     try:
         data = event.data.decode('utf-8')
         if data.startswith("cmd:"):
-            command = data[4:]  # استخراج الأمر بعد "cmd:"
-            # إرسال الأمر كما لو كان المستخدم كتبه
+            command = data[4:]
             await event.client.send_message(event.chat_id, command)
-            # إظهار رسالة تأكيد للمستخدم مع إخفائها بعد ثانية
             await event.answer(f"✅ تم إرسال: {command}", alert=False)
-            # حذف رسالة التأكيد المؤقتة
             await asyncio.sleep(0.5)
     except Exception as e:
         print(f"❌ خطأ في معالج الأزرار: {e}")
@@ -526,48 +632,19 @@ async def show_commands(event):
     if not await is_owner(event):
         return
     
-    # تقسيم الأوامر إلى مجموعات
-    commands = [
-        # مجموعة التنصيب
-        [".تنصيب", ".تنصيب جلسة"],
-        
-        # مجموعة الحماية
-        [".قفل", ".فتح", ".الحاله", ".البوتات", ".البوتات طرد"],
-        
-        # مجموعة المجموعة
-        [".تفليش", ".تصفير", ".الاعضاء", ".المشرفين", ".المعلومات", ".المحذوفين", ".المحذوفين تنظيف", ".مسح المحظورين", ".غادر", ".تاك"],
-        
-        # مجموعة التحميل
-        [".تحميل صوتي", ".تحميل فيد", ".صوتي"],
-        
-        # مجموعة المعلومات
-        [".ا", ".ايدي", ".ايديي", ".اسمي", ".كشف", ".id", ".stat", ".رابط الحساب"],
-        
-        # مجموعة البحث
-        [".بحث", ".فيديو", ".اغنية"],
-        
-        # مجموعة الوقت
-        [".تفعيل الوقت", ".تعطيل الوقت", ".صوره وقتيه", ".اسم وقتي", ".بايو وقتي", ".ايقاف"],
-        
-        # مجموعة التسلية
-        [".كت", ".نسبه الحب"],
-        
-        # مجموعة أخرى
-        [".مساعده"]
+    buttons = [
+        [Button.inline("📋 .تنصيب", data="cmd:.تنصيب"), Button.inline("📋 .تنصيب جلسة", data="cmd:.تنصيب جلسة")],
+        [Button.inline("📋 .قفل", data="cmd:.قفل"), Button.inline("📋 .فتح", data="cmd:.فتح"), Button.inline("📋 .الحاله", data="cmd:.الحاله")],
+        [Button.inline("📋 .تفليش", data="cmd:.تفليش"), Button.inline("📋 .تصفير", data="cmd:.تصفير"), Button.inline("📋 .الاعضاء", data="cmd:.الاعضاء")],
+        [Button.inline("📋 .المشرفين", data="cmd:.المشرفين"), Button.inline("📋 .المعلومات", data="cmd:.المعلومات")],
+        [Button.inline("📋 .تحميل صوتي", data="cmd:.تحميل صوتي"), Button.inline("📋 .تحميل فيد", data="cmd:.تحميل فيد"), Button.inline("📋 .صوتي", data="cmd:.صوتي")],
+        [Button.inline("📋 .ا", data="cmd:.ا"), Button.inline("📋 .ايدي", data="cmd:.ايدي"), Button.inline("📋 .كشف", data="cmd:.كشف")],
+        [Button.inline("📋 .بحث", data="cmd:.بحث"), Button.inline("📋 .فيديو", data="cmd:.فيديو"), Button.inline("📋 .اغنية", data="cmd:.اغنية")],
+        [Button.inline("📋 .تفعيل الوقت", data="cmd:.تفعيل الوقت"), Button.inline("📋 .صوره وقتيه", data="cmd:.صوره وقتيه")],
+        [Button.inline("📋 .كت", data="cmd:.كت"), Button.inline("📋 .نسبه الحب", data="cmd:.نسبه الحب")],
+        [Button.inline("❓ مساعدة", data="cmd:.مساعده")]
     ]
     
-    # إنشاء الأزرار
-    buttons = []
-    for cmd_list in commands:
-        row = []
-        for cmd in cmd_list:
-            row.append(Button.inline(f"📋 {cmd}", data=f"cmd:{cmd}"))
-        buttons.append(row)
-    
-    # إضافة زر مساعدة
-    buttons.append([Button.inline("❓ مساعدة", data="cmd:.مساعده")])
-    
-    # إرسال الرسالة مع الأزرار
     await event.reply("""
 ✧ **قائمة الأوامر الرئيسية** ✧
 
@@ -581,28 +658,12 @@ async def help_command(event):
     if not await is_owner(event):
         return
     
-    # إنشاء أزرار المساعدة
     help_buttons = [
-        [
-            Button.inline("📥 تنصيب", data="cmd:.تنصيب"),
-            Button.inline("📥 تنصيب جلسة", data="cmd:.تنصيب جلسة")
-        ],
-        [
-            Button.inline("🛡️ حماية", data="cmd:.الحاله"),
-            Button.inline("👥 مجموعة", data="cmd:.المعلومات")
-        ],
-        [
-            Button.inline("📥 تحميل", data="cmd:.صوتي"),
-            Button.inline("📋 معلومات", data="cmd:.ا")
-        ],
-        [
-            Button.inline("🔍 بحث", data="cmd:.بحث"),
-            Button.inline("⏰ وقت", data="cmd:.تفعيل الوقت")
-        ],
-        [
-            Button.inline("🎭 تسلية", data="cmd:.كت"),
-            Button.inline("📖 الأوامر", data="cmd:.الاوامر")
-        ]
+        [Button.inline("📥 تنصيب", data="cmd:.تنصيب"), Button.inline("📥 تنصيب جلسة", data="cmd:.تنصيب جلسة")],
+        [Button.inline("🛡️ حماية", data="cmd:.الحاله"), Button.inline("👥 مجموعة", data="cmd:.المعلومات")],
+        [Button.inline("📥 تحميل", data="cmd:.صوتي"), Button.inline("📋 معلومات", data="cmd:.ا")],
+        [Button.inline("🔍 بحث", data="cmd:.بحث"), Button.inline("⏰ وقت", data="cmd:.تفعيل الوقت")],
+        [Button.inline("🎭 تسلية", data="cmd:.كت"), Button.inline("📖 الأوامر", data="cmd:.الاوامر")]
     ]
     
     help_text = """
@@ -637,7 +698,6 @@ async def install_session(event):
 ✧ سورس عبود ✧
 """)
     
-    # تفعيل انتظار الجلسة
     global install_waiting, install_user_id, install_step
     install_waiting = True
     install_user_id = event.sender_id
@@ -655,7 +715,6 @@ async def handle_session_input(event):
     
     session_str = event.text.strip()
     
-    # التحقق من صحة الجلسة
     if not session_str or len(session_str) < 20:
         await event.reply("❌ الجلسة غير صالحة! تأكد من نسخ الجلسة كاملة")
         install_waiting = False
@@ -663,7 +722,6 @@ async def handle_session_input(event):
         return
     
     try:
-        # محاولة الاتصال بالجلسة
         temp_client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
         await temp_client.connect()
         
@@ -676,7 +734,6 @@ async def handle_session_input(event):
             await temp_client.disconnect()
             return
         
-        # حفظ الجلسة في الإعدادات
         CONFIG["session_string"] = session_str
         save_config()
         os.environ["SESSION_STRING"] = session_str
@@ -697,7 +754,6 @@ async def handle_session_input(event):
         install_waiting = False
         install_step = "phone"
         
-        # إعادة تشغيل البوت
         subprocess.Popen([sys.executable, __file__])
         sys.exit(0)
         
@@ -718,7 +774,6 @@ async def install_bot(event):
         await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
         return
 
-    # إنهاء أي عملية تنصيب سابقة
     if install_client:
         try:
             await install_client.disconnect()
@@ -1865,8 +1920,12 @@ async def protection_filter(event):
     chat_id = event.chat_id
     sender = await event.get_sender()
     
-    if sender.id == (await client.get_me()).id:
-        return
+    try:
+        me = await client.get_me()
+        if sender.id == me.id:
+            return
+    except:
+        pass
     
     try:
         permissions = await client.get_permissions(chat_id, sender.id)
@@ -1917,37 +1976,37 @@ async def add_time_to_message(event):
         print(f"❌ خطأ في تحديث الاسم: {e}")
 
 # ================================================================
-#                   خادم ويب (Web Server)
-# ================================================================
-
-async def run_web_server():
-    from aiohttp import web
-    
-    async def handle(request):
-        return web.Response(text="✅ Userbot is running!")
-    
-    app = web.Application()
-    app.router.add_get('/', handle)
-    
-    port = int(os.environ.get("PORT", 10000))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    print(f"✅ خادم الويب يعمل على المنفذ {port}")
-    
-    await asyncio.Event().wait()
-
-# ================================================================
-#                   التشغيل الرئيسي (Main)
+#                   التشغيل الرئيسي (Main) - المُعدّل للاستقرار
 # ================================================================
 
 async def main():
-    await client.start()
-    print("✅ البوت يعمل الآن...")
-    print(f"📁 ملف الإعدادات: {CONFIG_FILE}")
-    asyncio.create_task(keep_alive())
-    await run_web_server()
+    try:
+        print("🚀 جاري تشغيل البوت...")
+        await client.start()
+        me = await client.get_me()
+        print(f"✅ البوت يعمل الآن كـ: {me.first_name} (ID: {me.id})")
+        print(f"📁 ملف الإعدادات: {CONFIG_FILE}")
+        
+        # تشغيل حلقة keep_alive في الخلفية
+        asyncio.create_task(keep_alive())
+        
+        print("✅ البوت جاهز لاستقبال الأوامر")
+        
+        # استمرار التشغيل
+        await client.run_until_disconnected()
+        
+    except Exception as e:
+        print(f"❌ خطأ في التشغيل: {e}")
+        # محاولة إعادة التشغيل بعد 5 ثواني
+        print("🔄 محاولة إعادة التشغيل بعد 5 ثواني...")
+        await asyncio.sleep(5)
+        sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("⏹️ تم إيقاف البوت بواسطة المستخدم")
+    except Exception as e:
+        print(f"❌ خطأ فادح: {e}")
+        sys.exit(1)
