@@ -91,6 +91,13 @@ except ImportError:
     get = None
     print("⚠️ requests غير مثبت")
 
+# ========== خادم ويب ==========
+try:
+    from aiohttp import web
+except ImportError:
+    web = None
+    print("⚠️ aiohttp غير مثبت - سيتم تعطيل خادم الويب")
+
 # ========== ملفات الإعدادات ==========
 CONFIG_FILE = "config.json"
 GLOBALS_FILE = "globals.json"
@@ -657,7 +664,7 @@ async def show_commands(event):
         [Button.inline("📋 .حظر", data="cmd:.حظر"), Button.inline("📋 .الغاء حظر", data="cmd:.الغاء حظر"), Button.inline("📋 .كتم", data="cmd:.كتم")],
         [Button.inline("📋 .طرد", data="cmd:.طرد"), Button.inline("📋 .تثبيت", data="cmd:.تثبيت"), Button.inline("📋 .الغاء تثبيت", data="cmd:.الغاء تثبيت")],
         [Button.inline("📋 .الصورة", data="cmd:.الصورة"), Button.inline("📋 .الاحداث", data="cmd:.الاحداث")],
-        [Button.inline("📋 .صيد", data="cmd:.صيد"), Button.inline("📋 .تثبيت", data="cmd:.تثبيت"), Button.inline("📋 .كاشف", data="cmd:.كاشف")],
+        [Button.inline("📋 .صيد", data="cmd:.صيد"), Button.inline("📋 .تثبيت معرف", data="cmd:.تثبيت معرف"), Button.inline("📋 .كاشف", data="cmd:.كاشف")],
         [Button.inline("📋 .الذاتيه", data="cmd:.الذاتيه"), Button.inline("📋 .تفعيل الذاتيه", data="cmd:.تفعيل الذاتيه")],
         [Button.inline("❓ مساعدة", data="cmd:.مساعده")]
     ]
@@ -2543,7 +2550,7 @@ async def hunt_help(event):
 الامر:  `.صيد` + النوع
 - يقوم بصيد معرفات عشوائية حسب النوع
 
-الامر:  `تثبيت` + معرف
+الامر:  `تثبيت معرف` + معرف
 * وظيفة الامر : يقوم بالتثبيت على المعرف عندما يصبح متاح يأخذه
 
 ٴ— — — — — — — — — —
@@ -2965,12 +2972,45 @@ async def add_time_to_message(event):
         print(f"❌ خطأ في تحديث الاسم: {e}")
 
 # ================================================================
+#                   خادم الويب (Web Server)
+# ================================================================
+
+async def run_web_server():
+    """تشغيل خادم ويب بسيط لـ Render"""
+    try:
+        from aiohttp import web
+        
+        async def handle(request):
+            return web.Response(text="✅ سورس عبود - البوت يعمل!")
+        
+        app = web.Application()
+        app.router.add_get('/', handle)
+        app.router.add_get('/health', handle)
+        
+        port = int(os.environ.get("PORT", 10000))
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        print(f"✅ خادم الويب يعمل على المنفذ {port}")
+        
+        # نبقى الخادم شغالاً للأبد
+        await asyncio.Event().wait()
+        
+    except ImportError:
+        print("⚠️ aiohttp غير مثبت - خادم الويب معطل")
+    except Exception as e:
+        print(f"⚠️ خطأ في تشغيل خادم الويب: {e}")
+
+# ================================================================
 #                   التشغيل الرئيسي (Main)
 # ================================================================
 
 async def main():
     try:
         print("🚀 جاري تشغيل البوت...")
+        print("✧ سورس عبود ✧ @SSSTlF")
+        
         await client.start()
         me = await client.get_me()
         print(f"✅ البوت يعمل الآن كـ: {me.first_name} (ID: {me.id})")
@@ -2978,6 +3018,9 @@ async def main():
         
         # تشغيل حلقة keep_alive في الخلفية
         asyncio.create_task(keep_alive())
+        
+        # تشغيل خادم الويب
+        asyncio.create_task(run_web_server())
         
         print("✅ البوت جاهز لاستقبال الأوامر")
         print("✧ سورس عبود ✧ @SSSTlF")
