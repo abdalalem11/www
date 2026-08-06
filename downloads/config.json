@@ -1,1 +1,15 @@
-
+{
+    "api_id": 0,
+    "api_hash": "",
+    "session_string": "",
+    "time_enabled": false,
+    "saudi_offset_hours": 3,
+    "quotes": [],
+    "download_settings": {
+        "prefer_ffmpeg": true,
+        "addmetadata": true,
+        "geo-bypass": true,
+        "nocheckcertificate": true
+    },
+    "locks": {}
+}
