@@ -24,7 +24,8 @@ from telethon.tl.types import (
     ChannelParticipantAdmin, 
     InputPeerUser, 
     MessageEntityMentionName,
-    ChannelParticipantsKicked
+    ChannelParticipantsKicked,
+    KeyboardButtonCallback
 )
 from telethon.errors import (
     FloodWaitError, 
@@ -33,7 +34,13 @@ from telethon.errors import (
     SessionPasswordNeededError, 
     UserAlreadyParticipantError, 
     UserPrivacyRestrictedError, 
-    UserNotMutualContactError
+    UserNotMutualContactError,
+    BadRequestError,
+    ImageProcessFailedError,
+    PhotoCropSizeSmallError,
+    UserAdminInvalidError,
+    UserIdInvalidError,
+    YouBlockedUserError
 )
 from telethon.tl.functions.account import UpdateProfileRequest
 from telethon.tl.functions.channels import (
@@ -43,7 +50,9 @@ from telethon.tl.functions.channels import (
     GetParticipantsRequest,
     EditAdminRequest,
     EditPhotoRequest,
-    GetAdminedPublicChannelsRequest
+    GetAdminedPublicChannelsRequest,
+    UpdateUsernameRequest,
+    CreateChannelRequest
 )
 from telethon.tl.functions.messages import (
     GetFullChatRequest, 
@@ -59,7 +68,7 @@ from telethon.tl.functions.phone import (
 )
 from telethon.tl.functions.photos import GetUserPhotosRequest
 from telethon.tl.functions.users import GetFullUserRequest
-from telethon.utils import get_input_location
+from telethon.utils import get_input_location, get_display_name
 
 # ========== مكتبات خاصة ==========
 try:
@@ -369,6 +378,8 @@ BANNED_RIGHTS = ChatBannedRights(
     embed_links=True
 )
 UNBAN_RIGHTS = ChatBannedRights(until_date=None, view_messages=False)
+MUTE_RIGHTS = ChatBannedRights(until_date=None, send_messages=True)
+UNMUTE_RIGHTS = ChatBannedRights(until_date=None, send_messages=False)
 
 # ========== إنشاء عميل ==========
 if SESSION:
@@ -642,6 +653,12 @@ async def show_commands(event):
         [Button.inline("📋 .بحث", data="cmd:.بحث"), Button.inline("📋 .فيديو", data="cmd:.فيديو"), Button.inline("📋 .اغنية", data="cmd:.اغنية")],
         [Button.inline("📋 .تفعيل الوقت", data="cmd:.تفعيل الوقت"), Button.inline("📋 .صوره وقتيه", data="cmd:.صوره وقتيه")],
         [Button.inline("📋 .كت", data="cmd:.كت"), Button.inline("📋 .نسبه الحب", data="cmd:.نسبه الحب")],
+        [Button.inline("📋 .رفع مشرف", data="cmd:.رفع مشرف"), Button.inline("📋 .تنزيل مشرف", data="cmd:.تنزيل مشرف")],
+        [Button.inline("📋 .حظر", data="cmd:.حظر"), Button.inline("📋 .الغاء حظر", data="cmd:.الغاء حظر"), Button.inline("📋 .كتم", data="cmd:.كتم")],
+        [Button.inline("📋 .طرد", data="cmd:.طرد"), Button.inline("📋 .تثبيت", data="cmd:.تثبيت"), Button.inline("📋 .الغاء تثبيت", data="cmd:.الغاء تثبيت")],
+        [Button.inline("📋 .الصورة", data="cmd:.الصورة"), Button.inline("📋 .الاحداث", data="cmd:.الاحداث")],
+        [Button.inline("📋 .صيد", data="cmd:.صيد"), Button.inline("📋 .تثبيت", data="cmd:.تثبيت"), Button.inline("📋 .كاشف", data="cmd:.كاشف")],
+        [Button.inline("📋 .الذاتيه", data="cmd:.الذاتيه"), Button.inline("📋 .تفعيل الذاتيه", data="cmd:.تفعيل الذاتيه")],
         [Button.inline("❓ مساعدة", data="cmd:.مساعده")]
     ]
     
@@ -650,7 +667,7 @@ async def show_commands(event):
 
 📌 **اضغط على أي أمر لنسخه وإرساله تلقائياً**
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """, buttons=buttons)
 
 @client.on(events.NewMessage(pattern=r'^\.مساعده$'))
@@ -663,7 +680,9 @@ async def help_command(event):
         [Button.inline("🛡️ حماية", data="cmd:.الحاله"), Button.inline("👥 مجموعة", data="cmd:.المعلومات")],
         [Button.inline("📥 تحميل", data="cmd:.صوتي"), Button.inline("📋 معلومات", data="cmd:.ا")],
         [Button.inline("🔍 بحث", data="cmd:.بحث"), Button.inline("⏰ وقت", data="cmd:.تفعيل الوقت")],
-        [Button.inline("🎭 تسلية", data="cmd:.كت"), Button.inline("📖 الأوامر", data="cmd:.الاوامر")]
+        [Button.inline("🎭 تسلية", data="cmd:.كت"), Button.inline("📖 الأوامر", data="cmd:.الاوامر")],
+        [Button.inline("👑 مشرفين", data="cmd:.رفع مشرف"), Button.inline("🚫 حظر", data="cmd:.حظر")],
+        [Button.inline("🔎 كاشف", data="cmd:.كاشف"), Button.inline("🎯 صيد", data="cmd:.صيد")]
     ]
     
     help_text = """
@@ -671,7 +690,7 @@ async def help_command(event):
 
 📌 **اضغط على أي زر لنسخ الأمر وإرساله**
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """
     await event.reply(help_text, buttons=help_buttons)
 
@@ -695,7 +714,7 @@ async def install_session(event):
 
 ⚠️ **ملاحظة:** الجلسة تبدأ بـ `1` أو `2` وتكون طويلة
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """)
     
     global install_waiting, install_user_id, install_step
@@ -747,7 +766,7 @@ async def handle_session_input(event):
 
 🔄 جاري إعادة التشغيل...
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """)
         
         await temp_client.disconnect()
@@ -796,7 +815,7 @@ async def install_bot(event):
 
 💡 **بديل:** استخدم `.تنصيب جلسة` إذا كنت تملك جلسة مستخرجة
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """)
 
 @client.on(events.NewMessage(incoming=True))
@@ -830,7 +849,7 @@ async def handle_install_input(event):
 ⏳ جاري إرسال رمز التحقق...
 📩 أرسل الرمز الذي وصل إلى تيليجرام
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """)
                 install_step = "code"
 
@@ -882,7 +901,7 @@ async def handle_install_input(event):
 
 🔄 جاري إعادة التشغيل...
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """)
 
                 await install_client.disconnect()
@@ -898,7 +917,7 @@ async def handle_install_input(event):
 
 📌 أرسل الآن كلمة المرور الخاصة بحسابك
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """)
                 install_step = "password"
 
@@ -936,7 +955,7 @@ async def handle_install_input(event):
 
 🔄 جاري إعادة التشغيل...
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """)
 
                 await install_client.disconnect()
@@ -1156,7 +1175,7 @@ async def locks_status(event):
         icon = "🔒" if status else "🔓"
         text += f"{icon} `{name}` : {'مقفل' if status else 'مفتوح'}\n"
     
-    text += "\n✧ سورس عبود ✧"
+    text += "\n✧ **سورس عبود** ✧"
     await event.reply(text)
 
 @client.on(events.NewMessage(pattern=r'^\.البوتات(?: (.+))?$'))
@@ -1313,7 +1332,7 @@ async def chat_info(event):
 🚫 المحظورين: {full_chat.full_chat.kicked_count if hasattr(full_chat.full_chat, 'kicked_count') else 'غير معروف'}
 📝 الوصف: {full_chat.full_chat.about if full_chat.full_chat.about else 'لا يوجد'}
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """
     await zedevent.edit(info_text)
 
@@ -1449,7 +1468,7 @@ async def statistics(event):
 
 ⏱️ الوقت المستغرق: {stop_time:.2f} ثانية
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """
     await zedevent.edit(text)
 
@@ -1649,7 +1668,7 @@ async def my_info(event):
 📍 المنطقة : السعودية - الرياض
 👨‍💻 المطور : @SSSTlF
 
-✧ سورس عبود ✧"""
+✧ **سورس عبود** ✧"""
         photos = await client.get_profile_photos(me)
         if photos:
             await event.reply(text, file=photos[0])
@@ -1676,7 +1695,7 @@ async def developer_info(event):
 📢 القناة : @SSSTlF
 💎 المنصب : مطور السورس
 
-✧ سورس عبود ✧"""
+✧ **سورس عبود** ✧"""
         photos = await client.get_profile_photos(me)
         if photos:
             await event.reply(text, file=photos[0])
@@ -1703,7 +1722,7 @@ async def search_command(event):
 ✅ النتيجة : تم العثور
 🔗 الرابط : [اضغط هنا](https://www.google.com/search?q={query.replace(' ', '+')})
 
-✧ سورس عبود ✧"""
+✧ **سورس عبود** ✧"""
         await event.reply(text)
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
@@ -1725,7 +1744,7 @@ async def video_command(event):
 🎥 اسم الفيديو : {query}
 🔗 رابط المشاهدة : [اضغط هنا](https://www.youtube.com/results?search_query={query.replace(' ', '+')})
 
-✧ سورس عبود ✧"""
+✧ **سورس عبود** ✧"""
         await event.reply(text)
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
@@ -1747,7 +1766,7 @@ async def audio_command(event):
 🎵 اسم الاغنية : {query}
 🔗 رابط الاستماع : [اضغط هنا](https://www.youtube.com/results?search_query={query.replace(' ', '+')}+song)
 
-✧ سورس عبود ✧"""
+✧ **سورس عبود** ✧"""
         await event.reply(text)
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
@@ -1767,7 +1786,7 @@ async def quote_command(event):
 
 {quote}
 
-✧ سورس عبود ✧"""
+✧ **سورس عبود** ✧"""
         await event.reply(text)
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
@@ -1798,7 +1817,7 @@ async def love_percent(event):
 💕 النسبة: **{percent}%**
 {heart}
 
-✧ سورس عبود ✧
+✧ **سورس عبود** ✧
 """)
 
 # ================================================================
@@ -1909,6 +1928,976 @@ async def stop_auto(event):
         await event.reply("❌ خيار غير معروف\nالخيارات: صوره وقتيه, اسم وقتي, بايو وقتي")
 
 # ================================================================
+#                   أوامر المشرفين (Admin Commands)
+# ================================================================
+
+# أوامر رفع وتنزيل المشرفين
+@client.on(events.NewMessage(pattern=r'^\.رفع مشرف(?:\s|$)([\s\S]*)'))
+async def promote(event):
+    chat = await event.get_chat()
+    admin = chat.admin_rights
+    creator = chat.creator
+    if not admin and not creator:
+        await edit_or_reply(event, "**⪼ أحتـاج الى صلاحيـات المشـرف هنـا!!**")
+        return
+    
+    new_rights = ChatAdminRights(
+        add_admins=False,
+        invite_users=True,
+        change_info=False,
+        ban_users=False,
+        delete_messages=True,
+        pin_messages=True,
+    )
+    user, rank = await get_user_from_event(event)
+    if not rank:
+        rank = "admin"
+    if not user:
+        return
+    zzevent = await edit_or_reply(event, "**╮ ❐  جـارِ  ࢪفعـه مشـرف  . . .❏╰**")
+    try:
+        await event.client(EditAdminRequest(event.chat_id, user.id, new_rights, rank))
+    except BadRequestError:
+        return await zzevent.edit("**⪼ ليست لدي صلاحيـات كافيـه في هـذه المجمـوعـة**")
+    await zzevent.edit("**- ❝ ⌊  تـم تـرقيتـه مشـرف .. بنجـاح**")
+    if BOTLOG:
+        await event.client.send_message(
+            BOTLOG_CHATID,
+            f"#رفــع_مشــرف\
+            \n**- الشخـص :** [{user.first_name}](tg://user?id={user.id})\
+            \n**- الكــروب :** {get_display_name(await event.get_chat())} (`{event.chat_id}`)",
+        )
+
+@client.on(events.NewMessage(pattern=r'^\.رفع مالك(?:\s|$)([\s\S]*)'))
+async def promote_full(event):
+    chat = await event.get_chat()
+    admin = chat.admin_rights
+    creator = chat.creator
+    if not admin and not creator:
+        await edit_or_reply(event, "**⪼ أحتـاج الى صلاحيـات المشـرف هنـا!!**")
+        return
+    new_rights = ChatAdminRights(
+        add_admins=True,
+        invite_users=True,
+        change_info=True,
+        ban_users=True,
+        delete_messages=True,
+        pin_messages=True,
+        manage_call=True,
+    )
+    user, rank = await get_user_from_event(event)
+    if not rank:
+        rank = "admin"
+    if not user:
+        return
+    zzevent = await edit_or_reply(event, "**╮ ❐  جـاري ࢪفعه مشـرف بكـل الصـلاحيـات  ❏╰**")
+    try:
+        await event.client(EditAdminRequest(event.chat_id, user.id, new_rights, rank))
+    except BadRequestError:
+        return await zzevent.edit("**⪼ ليست لدي صلاحيـات كافيـه في هـذه المجمـوعـة**")
+    await zzevent.edit("**- ❝ ⌊  تم تـرقيتـه مشـرف عـام بكـل الصـلاحيـات . . .**")
+    if BOTLOG:
+        await event.client.send_message(
+            BOTLOG_CHATID,
+            f"#رفــع_مشــرف\
+            \n**- الشخـص :** [{user.first_name}](tg://user?id={user.id})\
+            \n**- الكــروب :** {get_display_name(await event.get_chat())} (`{event.chat_id}`)",
+        )
+
+@client.on(events.NewMessage(pattern=r'^\.اخفاء(?:\s|$)([\s\S]*)'))
+async def promote_anonymous(event):
+    chat = await event.get_chat()
+    admin = chat.admin_rights
+    creator = chat.creator
+    if not admin and not creator:
+        await edit_or_reply(event, "**⪼ أحتـاج الى صلاحيـات المشـرف هنـا!!**")
+        return
+    new_rights = ChatAdminRights(
+        add_admins=True,
+        invite_users=True,
+        change_info=True,
+        ban_users=True,
+        delete_messages=True,
+        pin_messages=True,
+        manage_call=True,
+        anonymous=True,
+    )
+    user, rank = await get_user_from_event(event)
+    if not rank:
+        rank = "admin"
+    if not user:
+        return
+    zzevent = await edit_or_reply(event, "**╮ ❐  جـارِ التعديل  ❏╰**")
+    try:
+        await event.client(EditAdminRequest(event.chat_id, user.id, new_rights, rank))
+    except BadRequestError:
+        return await zzevent.edit("**⪼ ليست لدي صلاحيـات كافيـه في هـذه المجمـوعـة**")
+    await zzevent.edit("**- ❝ ⌊  تم التعديل بنجاح**")
+    if BOTLOG:
+        await event.client.send_message(
+            BOTLOG_CHATID,
+            f"#رفــع_مشــرف\
+            \n**- الشخـص :** [{user.first_name}](tg://user?id={user.id})\
+            \n**- الكــروب :** {get_display_name(await event.get_chat())} (`{event.chat_id}`)",
+        )
+
+@client.on(events.NewMessage(pattern=r'^\.تنزيل مشرف(?:\s|$)([\s\S]*)'))
+async def demote(event):
+    chat = await event.get_chat()
+    admin = chat.admin_rights
+    creator = chat.creator
+    if not admin and not creator:
+        await edit_or_reply(event, "**⪼ أحتـاج الى صلاحيـات المشـرف هنـا!!**")
+        return
+    user, _ = await get_user_from_event(event)
+    if not user:
+        return
+    zzevent = await edit_or_reply(event, "**╮ ❐ جـارِ التنزيل  ❏╰**")
+    newrights = ChatAdminRights(
+        add_admins=None,
+        invite_users=None,
+        change_info=None,
+        ban_users=None,
+        delete_messages=None,
+        pin_messages=None,
+    )
+    rank = "مشرف"
+    try:
+        await event.client(EditAdminRequest(event.chat_id, user.id, newrights, rank))
+    except BadRequestError:
+        return await zzevent.edit("**⪼ ليست لدي صلاحيـات كافيـه في هـذه المجمـوعـة**")
+    await zzevent.edit("**- ❝ ⌊  تم تنزيلـه من الاشـرف بنجـاح**")
+    if BOTLOG:
+        await event.client.send_message(
+            BOTLOG_CHATID,
+            f"#تنـزيــل_مشــرف\
+            \n**- الشخـص :** [{user.first_name}](tg://user?id={user.id})\
+            \n**- الكــروب :** {get_display_name(await event.get_chat())}(`{event.chat_id}`)",
+        )
+
+# أوامر الحظر والكتم والطرد
+@client.on(events.NewMessage(pattern=r'^\.حظر(?:\s|$)([\s\S]*)'))
+async def _ban_person(event):
+    user, reason = await get_user_from_event(event)
+    if not user:
+        return
+    if user.id == event.client.uid:
+        return await edit_delete(event, "**⪼ عـذراً ..لا استطيـع حظـࢪ نفسـي**")
+    if user.id == 5502537272:
+        return await edit_delete(event, "**╮ ❐ دي لا يمڪنني حظـر احـد مطـورين السـورس  ❏╰**")
+    zedevent = await edit_or_reply(event, "**╮ ❐... جـاࢪِ الحـظـࢪ ...❏╰**")
+    try:
+        await event.client(EditBannedRequest(event.chat_id, user.id, BANNED_RIGHTS))
+    except BadRequestError:
+        return await zedevent.edit("**⪼ ليست لدي صلاحيـات كافيـه في هـذه المجمـوعـة**")
+    if reason:
+        await zedevent.edit(f"**- المستخـدم :** [{user.first_name}](tg://user?id={user.id})  \n**- تـم حظـࢪه بنجـاح ☑️**\n\n**- السـبب :** `{reason}`")
+    else:    
+        await zedevent.edit(f"**- المستخـدم :** [{user.first_name}](tg://user?id={user.id})  \n**- تـم حظــࢪه بنجـاح ☑️**")
+    if BOTLOG:
+        if reason:
+            await event.client.send_message(
+                BOTLOG_CHATID,
+                f"#الحظــࢪ\
+                \n- الشخـص : [{user.first_name}](tg://user?id={user.id})\
+                \n- الدردشــه: {get_display_name(await event.get_chat())}(`{event.chat_id}`)\
+                \n- السـبب : {reason}",
+            )
+        else:
+            await event.client.send_message(
+                BOTLOG_CHATID,
+                f"#الحظــࢪ\
+                \n- الشخـص : [{user.first_name}](tg://user?id={user.id})\
+                \n- الدردشــه : {get_display_name(await event.get_chat())}(`{event.chat_id}`)",
+            )
+
+@client.on(events.NewMessage(pattern=r'^\.الغاء حظر(?:\s|$)([\s\S]*)'))
+async def nothanos(event):
+    user, _ = await get_user_from_event(event)
+    if not user:
+        return
+    zedevent = await edit_or_reply(event, "**╮ ❐.. جـاري الغاء حـظࢪه ..❏╰**")
+    try:
+        await event.client(EditBannedRequest(event.chat_id, user.id, UNBAN_RIGHTS))
+        await zedevent.edit(f"**- المستخـدم :** [{user.first_name}](tg://user?id={user.id})  \n**- تم الغـاء حظــࢪه بنجــاح ✓**")
+        if BOTLOG:
+            await event.client.send_message(
+                BOTLOG_CHATID,
+                "#الغــاء_الحظــࢪ\n"
+                f"- الشخـص : [{user.first_name}](tg://user?id={user.id})\n"
+                f"- الدردشــه : {get_display_name(await event.get_chat())}(`{event.chat_id}`)",
+            )
+    except UserIdInvalidError:
+        await zedevent.edit("`Uh oh my unban logic broke!`")
+    except Exception as e:
+        await zedevent.edit(f"**- خطــأ :**\n`{e}`")
+
+@client.on(events.NewMessage(pattern=r'^\.كتم(?:\s|$)([\s\S]*)'))
+async def startmute(event):
+    if event.is_private:
+        replied_user = await event.client.get_entity(event.chat_id)
+        if is_muted(event.chat_id, event.chat_id):
+            return await event.edit("**- ❝ ⌊هـذا المسـتخـدم مڪتـوم . . سـابقـاً**")
+        if event.chat_id == client.uid:
+            return await edit_delete(event, "**- لا تستطــع كتـم نفسـك**")
+        if event.chat_id == 5502537272:
+            return await edit_delete(event, "**╮ ❐ دي لا يمڪنني كتـم احـد مطـورين السـورس  ❏╰**")
+        try:
+            mute_user(event.chat_id, event.chat_id)
+        except Exception as e:
+            await event.edit(f"**- خطـأ **\n`{e}`")
+        else:
+            await event.edit("**⪼ تم ڪتـم الـمستخـدم  . . بنجـاح 🔕**")
+        if BOTLOG:
+            await event.client.send_message(
+                BOTLOG_CHATID,
+                "#كتــم_الخــاص\n"
+                f"**- الشخـص  :** [{replied_user.first_name}](tg://user?id={event.chat_id})\n",
+            )
+    else:
+        chat = await event.get_chat()
+        admin = chat.admin_rights
+        creator = chat.creator
+        if not admin and not creator:
+            return await edit_or_reply(event, "**⪼ أنـا لسـت مشـرف هنـا ؟!!**")
+        user, reason = await get_user_from_event(event)
+        if not user:
+            return
+        if user.id == client.uid:
+            return await edit_or_reply(event, "**- عــذراً .. لا استطيــع كتــم نفســي**")
+        if user.id == 5502537272:
+            return await edit_or_reply(event, "**╮ ❐ دي لا يمڪنني كتـم احـد مطـورين السـورس  ❏╰**")
+        if is_muted(user.id, event.chat_id):
+            return await edit_or_reply(event, "**عــذراً .. هـذا الشخـص مكتــوم سـابقــاً هنـا**")
+        try:
+            mute_user(user.id, event.chat_id)
+        except Exception as e:
+            return await edit_or_reply(event, f"**- خطــأ : **`{e}`")
+        if reason:
+            await edit_or_reply(event, f"**- المستخـدم :** [{user.first_name}](tg://user?id={user.id})  \n**- تـم كتمـه بنجـاح ☑️**\n\n**- السـبب :** {reason}")
+        else:
+            await edit_or_reply(event, f"**- المستخـدم :** [{user.first_name}](tg://user?id={user.id})  \n**- تـم كتمـه بنجـاح ☑️**")
+        if BOTLOG:
+            await event.client.send_message(
+                BOTLOG_CHATID,
+                "#الكــتم\n"
+                f"**الشخـص :** [{user.first_name}](tg://user?id={user.id})\n"
+                f"**الدردشـه :** {get_display_name(await event.get_chat())}(`{event.chat_id}`)",
+            )
+
+@client.on(events.NewMessage(pattern=r'^\.الغاء كتم(?:\s|$)([\s\S]*)'))
+async def endmute(event):
+    if event.is_private:
+        replied_user = await event.client.get_entity(event.chat_id)
+        if not is_muted(event.chat_id, event.chat_id):
+            return await event.edit("**عــذراً .. هـذا الشخـص غيــر مكتــوم هنـا**")
+        try:
+            unmute_user(event.chat_id, event.chat_id)
+        except Exception as e:
+            await event.edit(f"**- خطـأ **\n`{e}`")
+        else:
+            await event.edit("**- تـم الغــاء كتــم الشخـص هنـا .. بنجــاح ✓**")
+        if BOTLOG:
+            await event.client.send_message(
+                BOTLOG_CHATID,
+                "#الغــاء_الكــتم\n"
+                f"**- الشخـص :** [{replied_user.first_name}](tg://user?id={event.chat_id})\n",
+            )
+    else:
+        user, _ = await get_user_from_event(event)
+        if not user:
+            return
+        try:
+            if is_muted(user.id, event.chat_id):
+                unmute_user(user.id, event.chat_id)
+            else:
+                result = await event.client.get_permissions(event.chat_id, user.id)
+                if result.participant.banned_rights.send_messages:
+                    await event.client(EditBannedRequest(event.chat_id, user.id, UNBAN_RIGHTS))
+        except AttributeError:
+            return await edit_or_reply(event, "**- الشخـص غيـر مكـتـوم**")
+        except Exception as e:
+            return await edit_or_reply(event, f"**- خطــأ : **`{e}`")
+        await edit_or_reply(event, f"**- المستخـدم :** [{user.first_name}](tg://user?id={user.id}) \n**- تـم الغـاء كتمـه بنجـاح ☑️**")
+        if BOTLOG:
+            await event.client.send_message(
+                BOTLOG_CHATID,
+                "#الغــاء_الكــتم\n"
+                f"**- الشخـص :** [{user.first_name}](tg://user?id={user.id})\n"
+                f"**- الدردشــه :** {get_display_name(await event.get_chat())}(`{event.chat_id}`)",
+            )
+
+@client.on(events.NewMessage(pattern=r'^\.طرد(?:\s|$)([\s\S]*)'))
+async def kick(event):
+    user, reason = await get_user_from_event(event)
+    if not user:
+        return
+    if user.id == 5502537272:
+        return await edit_delete(event, "**╮ ❐ دي لا يمڪنني طـرد احـد مطـورين السـورس  ❏╰**")
+    zedevent = await edit_or_reply(event, "**╮ ❐... جـاࢪِ الطــࢪد ...❏╰**")
+    try:
+        await event.client.kick_participant(event.chat_id, user.id)
+    except Exception as e:
+        return await zedevent.edit(f"**⪼ ليست لدي صلاحيـات كافيـه في هـذه المجمـوعـة**\n{e}")
+    if reason:
+        await zedevent.edit(f"**- تـم طــࢪد** [{user.first_name}](tg://user?id={user.id})  **بنجــاح ✓**\n\n**- السـبب :** {reason}")
+    else:
+        await zedevent.edit(f"**- تـم طــࢪد** [{user.first_name}](tg://user?id={user.id})  **بنجــاح ✓**")
+    if BOTLOG:
+        await event.client.send_message(
+            BOTLOG_CHATID,
+            "#الـطــࢪد\n"
+            f"**- الشخـص**: [{user.first_name}](tg://user?id={user.id})\n"
+            f"**- الدردشــه** : {get_display_name(await event.get_chat())}(`{event.chat_id}`)\n",
+        )
+
+# ================================================================
+#                   أوامر الصورة (Photo Commands)
+# ================================================================
+
+PP_TOO_SMOL = "**⪼ الصورة صغيرة جدا**"
+PP_ERROR = "**⪼ فشل اثناء معالجة الصورة**"
+NO_ADMIN = "**⪼ أحتـاج الى صلاحيـات المشـرف هنـا!!**"
+NO_PERM = "**⪼ ليست لدي صلاحيـات كافيـه في هـذه المجمـوعـة**"
+CHAT_PP_CHANGED = "**⪼ تم تغييـر صـورة المجمـوعـة .. بنجـاح ✓**"
+INVALID_MEDIA = "**⪼ ابعاد الصورة غير صالحة**"
+
+@client.on(events.NewMessage(pattern=r'^\.الصورة (وضع|حذف)$'))
+async def set_group_photo(event):
+    "لـ وضـع صــوره لـ المجمـوعـه"
+    flag = (event.pattern_match.group(1)).strip()
+    if flag == "وضع":
+        replymsg = await event.get_reply_message()
+        photo = None
+        if replymsg and replymsg.media:
+            if isinstance(replymsg.media, MessageMediaPhoto):
+                photo = await event.client.download_media(message=replymsg.photo)
+            elif "image" in replymsg.media.document.mime_type.split("/"):
+                photo = await event.client.download_file(replymsg.media.document)
+            else:
+                return await edit_delete(event, INVALID_MEDIA)
+        if photo:
+            try:
+                await event.client(
+                    EditPhotoRequest(
+                        event.chat_id, await event.client.upload_file(photo)
+                    )
+                )
+                await edit_delete(event, CHAT_PP_CHANGED)
+            except PhotoCropSizeSmallError:
+                return await edit_delete(event, PP_TOO_SMOL)
+            except ImageProcessFailedError:
+                return await edit_delete(event, PP_ERROR)
+            except Exception as e:
+                return await edit_delete(event, f"**- خطــأ : **`{str(e)}`")
+            process = "تم تغييرهـا"
+    else:
+        try:
+            await event.client(EditPhotoRequest(event.chat_id, InputChatPhotoEmpty()))
+        except Exception as e:
+            return await edit_delete(event, f"**- خطــأ : **`{e}`")
+        process = "تم حذفهـا"
+        await edit_delete(event, "**- صورة الدردشـه {process} . . بنجـاح ✓**")
+    if BOTLOG:
+        await event.client.send_message(
+            BOTLOG_CHATID,
+            "#صـورة_المجمـوعـة\n"
+            f"صورة المجموعه {process} بنجاح ✓ "
+            f"الدردشة: {get_display_name(await event.get_chat())}(`{event.chat_id}`)",
+        )
+
+# ================================================================
+#                   أوامر التثبيت (Pin Commands)
+# ================================================================
+
+@client.on(events.NewMessage(pattern=r'^\.تثبيت( لود|$)$'))
+async def pin(event):
+    "لـ تثبيـت الرسـائـل فـي الكــروب"
+    to_pin = event.reply_to_msg_id
+    if not to_pin:
+        return await edit_delete(event, "**- بالــرد ع رسـالـه لـ تثبيتـهـا...**", 5)
+    options = event.pattern_match.group(1)
+    is_silent = bool(options)
+    try:
+        await event.client.pin_message(event.chat_id, to_pin, notify=is_silent)
+    except BadRequestError:
+        return await edit_delete(event, NO_PERM, 5)
+    except Exception as e:
+        return await edit_delete(event, f"`{e}`", 5)
+    await edit_delete(event, "**- تـم تثبيـت الرسـالـه .. بنجــاح ✓**", 3)
+    if BOTLOG and not event.is_private:
+        await event.client.send_message(
+            BOTLOG_CHATID,
+            f"#تثبيــت_رســالـه\
+                \n**- تـم تثبيــت رســالـه فـي الدردشــه**\
+                \n**- الدردشــه** : {get_display_name(await event.get_chat())}(`{event.chat_id}`)\
+                \n**- لـــود** : {is_silent}",
+        )
+
+@client.on(events.NewMessage(pattern=r'^\.الغاء تثبيت( الكل|$)$'))
+async def unpin(event):
+    "لـ الغــاء تثبيـت الرسـائـل فـي الكــروب"
+    to_unpin = event.reply_to_msg_id
+    options = (event.pattern_match.group(1)).strip()
+    if not to_unpin and options != "الكل":
+        return await edit_delete(
+            event,
+            "**- بالــرد ع رســالـه لـ الغــاء تثبيتـهــا او اسـتخـدم امـر .الغاء تثبيت الكل**",
+            5,
+        )
+    try:
+        if to_unpin and not options:
+            await event.client.unpin_message(event.chat_id, to_unpin)
+        elif options == "all":
+            await event.client.unpin_message(event.chat_id)
+        else:
+            return await edit_delete(
+                event, "**- بالــرد ع رســالـه لـ الغــاء تثبيتـهــا او اسـتخـدم امـر .الغاء تثبيت الكل**", 5
+            )
+    except BadRequestError:
+        return await edit_delete(event, NO_PERM, 5)
+    except Exception as e:
+        return await edit_delete(event, f"`{e}`", 5)
+    await edit_delete(event, "**- تـم الغـاء تثبيـت الرسـالـه/الرسـائـل .. بنجــاح ✓**", 3)
+    if BOTLOG and not event.is_private:
+        await event.client.send_message(
+            BOTLOG_CHATID,
+            f"#الغــاء_تثبيــت_رســالـه\
+                \n**- تـم الغــاء تثبيــت رســالـه فـي الدردشــه**\
+                \n**- الدردشــه** : {get_display_name(await event.get_chat())}(`{event.chat_id}`)",
+        )
+
+# ================================================================
+#                   أوامر الأحداث (Admin Log Commands)
+# ================================================================
+
+@client.on(events.NewMessage(pattern=r'^\.الاحداث( م)?(?: |$)(\d*)?$'))
+async def _iundlt(event):
+    "لـ جـلب آخـر الرسـائـل المحـذوفـه مـن الاحـداث بـ العـدد"
+    zedevent = await edit_or_reply(event, "**- جـاري البحث عـن آخـر الاحداث انتظــر ...🔍**")
+    flag = event.pattern_match.group(1)
+    if event.pattern_match.group(2) != "":
+        lim = int(event.pattern_match.group(2))
+        lim = min(lim, 15)
+        if lim <= 0:
+            lim = 1
+    else:
+        lim = 5
+    adminlog = await event.client.get_admin_log(
+        event.chat_id, limit=lim, edit=False, delete=True
+    )
+    deleted_msg = f"**- اليـك آخـر {lim} رسـائـل محذوفــه لـ هـذا الكــروب 🗑 :**"
+    if not flag:
+        for msg in adminlog:
+            ruser = await event.client.get_entity(msg.old.from_id)
+            _media_type = media_type(msg.old)
+            if _media_type is None:
+                deleted_msg += f"\n🖇┊{msg.old.message} \n\n**🛂┊تم ارسـالهـا بـواسطـة** [{ruser.first_name}](tg://user?id={ruser.id})"
+            else:
+                deleted_msg += f"\n🖇┊{_media_type} \n\n**🛂┊تم ارسـالهـا بـواسطـة** [{ruser.first_name}](tg://user?id={ruser.id})"
+        await edit_or_reply(zedevent, deleted_msg)
+    else:
+        main_msg = await edit_or_reply(zedevent, deleted_msg)
+        for msg in adminlog:
+            ruser = await event.client.get_entity(msg.old.from_id)
+            _media_type = media_type(msg.old)
+            if _media_type is None:
+                await main_msg.reply(
+                    f"\n🖇┊{msg.old.message} \n\n**🛂┊تم ارسـالهـا بـواسطـة** [{ruser.first_name}](tg://user?id={ruser.id})"
+                )
+            else:
+                await main_msg.reply(
+                    f"\n🖇┊{msg.old.message} \n\n**🛂┊تم ارسـالهـا بـواسطـة** [{ruser.first_name}](tg://user?id={ruser.id})",
+                    file=msg.old.media,
+                )
+
+def media_type(message):
+    if message and message.media:
+        if message.photo:
+            return "صورة"
+        if message.document:
+            if message.document.mime_type:
+                if "audio" in message.document.mime_type:
+                    return "صوت"
+                if "video" in message.document.mime_type:
+                    return "فيديو"
+                if "image" in message.document.mime_type:
+                    return "صورة"
+            return "ملف"
+        if message.sticker:
+            return "ملصق"
+        if message.gif:
+            return "متحركة"
+        if message.video:
+            return "فيديو"
+        if message.voice:
+            return "بصمة"
+        if message.audio:
+            return "صوت"
+        if message.contact:
+            return "جهة اتصال"
+        if message.location:
+            return "موقع"
+        if message.venue:
+            return "مكان"
+        if message.poll:
+            return "استطلاع"
+    return None
+
+# ================================================================
+#                   أوامر الصيد (Hunt Commands)
+# ================================================================
+
+import random
+import requests
+from fake_useragent import UserAgent
+from telethon.sync import functions
+
+a = "qwertyuiopassdfghjklzxcvbnm"
+b = "1234567890"
+e = "qwertyuiopassdfghjklzxcvbnm1234567890"
+
+trys, trys2 = [0], [0]
+isclaim = ["off"]
+isauto = ["off"]
+
+def check_user(username):
+    url = "https://t.me/" + str(username)
+    ua = UserAgent()
+    headers = {
+        "User-Agent": ua.random,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7",
+    }
+    session = requests.Session()
+    response = session.get(url, headers=headers)
+    if response.text.find('If you have <strong>Telegram</strong>, you can contact <a class="tgme_username_link"') >= 0:
+        return True
+    else:
+        return False
+
+def gen_user(choice):
+    if choice == "ثلاثي":
+        c = random.choices(a)
+        d = random.choices(b)
+        s = random.choices(e)
+        f = [c[0], "_", d[0], "_", s[0]]
+        username = "".join(f)
+    elif choice == "خماسي":
+        c = d = random.choices(a)
+        d = random.choices(b)
+        f = [c[0], c[0], c[0], c[0], d[0]]
+        random.shuffle(f)
+        username = "".join(f)
+    elif choice == "خماسي حرفين":
+        c = random.choices(a)
+        d = random.choices(e)
+        f = [c[0], d[0], c[0], c[0], d[0]]
+        random.shuffle(f)
+        username = "".join(f)
+    elif choice == "سداسي":
+        c = d = random.choices(a)
+        d = random.choices(e)
+        f = [c[0], c[0], c[0], c[0], c[0], d[0]]
+        random.shuffle(f)
+        username = "".join(f)
+    elif choice == "سداسي حرفين":
+        c = d = random.choices(a)
+        d = random.choices(b)
+        f = [c[0], d[0], c[0], c[0], c[0], d[0]]
+        random.shuffle(f)
+        username = "".join(f)
+    elif choice == "سباعي":
+        c = d = random.choices(a)
+        d = random.choices(b)
+        f = [c[0], c[0], c[0], c[0], d[0], c[0], c[0]]
+        random.shuffle(f)
+        username = "".join(f)
+    elif choice == "بوتات":
+        c = random.choices(a)
+        d = random.choices(e)
+        s = random.choices(e)
+        f = [c[0], s[0], d[0]]
+        username = "".join(f)
+        username = username + "bot"
+    elif choice == "تيست":
+        c = d = random.choices(a)
+        d = random.choices(b)
+        f = [c[0], d[0], c[0], d[0], d[0], c[0], c[0], d[0], c[0], d[0]]
+        random.shuffle(f)
+        username = "".join(f)
+    else:
+        raise ValueError("Invalid choice for username generation.")
+    return username
+
+@client.on(events.NewMessage(pattern=r'^\.الصيد$'))
+async def hunt_help(event):
+    await event.edit("""
+**أوامـر الـصـيـد الخـاصة بـســورس عبود**: 
+
+ٴ— — — — — — — — — —
+
+النوع :(  سداسي حرفين/ ثلاثي/ سداسي/ بوتات/ خماسي حرفين/خماسي /سباعي )
+
+الامر:  `.صيد` + النوع
+- يقوم بصيد معرفات عشوائية حسب النوع
+
+الامر:  `تثبيت` + معرف
+* وظيفة الامر : يقوم بالتثبيت على المعرف عندما يصبح متاح يأخذه
+
+ٴ— — — — — — — — — —
+الامر:   `.حالة الصيد`
+• لمعرفة عدد المحاولات للصيد
+
+الامر:  `.حالة التثبيت`
+• لمعرفة عدد المحاولات للصيد
+
+**سورس عبود - @SSSTlF**
+
+""")
+
+@client.on(events.NewMessage(pattern=r'^\.صيد (.*)$'))
+async def hunterusername(event):
+    choice = str(event.pattern_match.group(1))
+    await event.edit(f"**- تم تفعيل الصيد بنجاح الان**")
+    try:
+        ch = await client(
+            functions.channels.CreateChannelRequest(
+                title="ABOOD HUNTER - صيد عبود",
+                about="This channel to hunt username by - @SSSTlF",
+            )
+        )
+        ch = ch.updates[1].channel_id
+    except Exception as e:
+        await client.send_message(
+            event.chat_id, f"خطأ في انشاء القناة , الخطأ**-  : {str(e)}**"
+        )
+        sedmod = False
+    isclaim.clear()
+    isclaim.append("on")
+    sedmod = True
+    while sedmod:
+        username = gen_user(choice)
+        if username == "error":
+            await event.edit("**- يرجى وضع النوع بشكل صحيح**")
+            break
+        isav = check_user(username)
+        if isav == True:
+            try:
+                await client(
+                    functions.channels.UpdateUsernameRequest(
+                        channel=ch, username=username
+                    )
+                )
+                await event.client.send_file(
+                    event.chat_id,
+                    "https://t.me/Repthongif/2",
+                    caption="🐊 سورس عبود 🐊\n- - - - - - - - - - - - - - - - - - - - - - - -\n- UserName: ❲ @{} ❳\n- ClickS: ❲ {} ❳\n- Type: {}\n- Save: ❲ Chaneel ❳\n- - - - - - - - - - - - - - - - - - - - - - - -\nسورس عبود ❲ @SSSTlF ❳ ".format(
+                        username, trys, choice
+                    ),
+                )
+                await event.client.send_file(
+                    ch,
+                    "https://t.me/Repthongif/2",
+                    caption="🐊 سورس عبود 🐊\n- - - - - - - - - - - - - - - - - - - - - - - -\n- UserName: ❲ @{} ❳\n- ClickS: ❲ {} ❳\n- Type: {}\n- Save: ❲ Chaneel ❳\n- - - - - - - - - - - - - - - - - - - - - - - -\nسورس عبود ❲ @SSSTlF ❳ ".format(
+                        username, trys, choice
+                    ),
+                )
+                sedmod = False
+                break
+            except telethon.errors.rpcerrorlist.UsernameInvalidError:
+                pass
+            except Exception as baned:
+                if "(caused by UpdateUsernameRequest)" in str(baned):
+                    pass
+            except telethon.errors.FloodError as e:
+                await client.send_message(
+                    event.chat_id,
+                    f"للاسف تبندت , مدة الباند**-  ({e.seconds}) ثانية .**",
+                )
+                sedmod = False
+                break
+            except Exception as eee:
+                if "the username is already" in str(eee):
+                    pass
+                if "USERNAME_PURCHASE_AVAILABLE" in str(eee):
+                    pass
+                else:
+                    await client.send_message(
+                        event.chat_id,
+                        f"""- خطأ مع @{username} , الخطأ :{str(eee)}""",
+                    )
+                    sedmod = False
+                    break
+        else:
+            pass
+        trys[0] += 1
+    isclaim.clear()
+    isclaim.append("off")
+
+@client.on(events.NewMessage(pattern=r'^\.تثبيت معرف (.*)$'))
+async def _(event):
+    msg = event.text.split()
+    try:
+        ch = str(msg[2])
+        ch = ch.replace("@", "")
+        await event.edit(f"حسناً سيتم بدء التثبيت في**-  @{ch} .**")
+    except:
+        try:
+            ch = await client(
+                functions.channels.CreateChannelRequest(
+                    title="ABOOD HUNTER - تثبيت عبود",
+                    about="This channel to hunt username by - @SSSTlF",
+                )
+            )
+            ch = ch.updates[1].channel_id
+            await event.edit(f"**- تم بنجاح بدأ التثبيت**")
+        except Exception as e:
+            await client.send_message(
+                event.chat_id, f"خطأ في انشاء القناة , الخطأ : {str(e)}"
+            )
+    isauto.clear()
+    isauto.append("on")
+    username = str(msg[1])
+    swapmod = True
+    while swapmod:
+        isav = check_user(username)
+        if isav == True:
+            try:
+                await client(
+                    functions.channels.UpdateUsernameRequest(
+                        channel=ch, username=username
+                    )
+                )
+                await event.client.send_file(
+                    ch,
+                    "https://t.me/Repthongif/2",
+                    caption="🐊 سورس عبود 🐊\n- - - - - - - - - - - - - - - - - - - - - - - -\n- UserName: ❲ @{} ❳\n- ClickS: ❲ {} ❳\n- Save: ❲ Chaneel ❳\n- - - - - - - - - - - - - - - - - - - - - - - -\nسورس عبود ❲ @SSSTlF ❳ ".format(
+                        username, trys2
+                    ),
+                )
+                await event.client.send_file(
+                    event.chat_id,
+                    "https://t.me/Repthongif/2",
+                    caption="🐊 سورس عبود 🐊\n- - - - - - - - - - - - - - - - - - - - - - - -\n- UserName: ❲ @{} ❳\n- ClickS: ❲ {} ❳\n- Save: ❲ Chaneel ❳\n- - - - - - - - - - - - - - - - - - - - - - - -\nسورس عبود ❲ @SSSTlF ❳ ".format(
+                        username, trys2
+                    ),
+                )
+                swapmod = False
+                break
+            except telethon.errors.rpcerrorlist.UsernameInvalidError:
+                await event.client.send_message(
+                    event.chat_id, f"المعرف **-  @{username} غير صالح . **"
+                )
+                swapmod = False
+                break
+            except telethon.errors.FloodError as e:
+                await client.send_message(
+                    event.chat_id, f"للاسف تبندت , مدة الباند ({e.seconds}) ثانية ."
+                )
+                swapmod = False
+                break
+            except Exception as eee:
+                await client.send_message(
+                    event.chat_id,
+                    f"""خطأ مع {username} , الخطأ :{str(eee)}""",
+                )
+                swapmod = False
+                break
+        else:
+            pass
+        trys2[0] += 1
+    isauto.clear()
+    isauto.append("off")
+
+@client.on(events.NewMessage(pattern=r'^\.ايقاف الصيد$'))
+async def _(event):
+    if "on" in isclaim:
+        isclaim.clear()
+        isclaim.append("off")
+        return await event.edit("**- تم بنجاح ايقاف عملية الصيد**")
+    elif "off" in isclaim:
+        return await event.edit("**- لم يتم تفعيل الصيد بالأصل لأيقافه**")
+    else:
+        return await event.edit("**- لقد حدث خطأ ما وتوقف الامر لديك**")
+
+@client.on(events.NewMessage(pattern=r'^\.ايقاف التثبيت$'))
+async def _(event):
+    if "on" in isauto:
+        isauto.clear()
+        isauto.append("off")
+        return await event.edit("**- تم بنجاح ايقاف عملية التثبيت**")
+    elif "off" in isauto:
+        return await event.edit("**- لم يتم تفعيل التثبيت بالأصل لأيقافه**")
+    else:
+        return await event.edit("**-لقد حدث خطأ ما وتوقف الامر لديك**")
+
+@client.on(events.NewMessage(pattern=r'^\.حالة الصيد$'))
+async def _(event):
+    if "on" in isclaim:
+        await event.edit(f"**- الصيد وصل لـ({trys[0]}) **من المحاولات")
+    elif "off" in isclaim:
+        await event.edit("**- الصيد بالاصل لا يعمل .**")
+    else:
+        await event.edit("- لقد حدث خطأ ما وتوقف الامر لديك")
+
+@client.on(events.NewMessage(pattern=r'^\.حالة التثبيت$'))
+async def _(event):
+    if "on" in isauto:
+        await event.edit(f"**- التثبيت وصل لـ({trys2[0]}) من المحاولات**")
+    elif "off" in isauto:
+        await event.edit("**- التثبيت بالاصل لا يعمل .**")
+    else:
+        await event.edit("-لقد حدث خطأ ما وتوقف الامر لديك")
+
+# ================================================================
+#                   أوامر الذاتية (Self Media Commands)
+# ================================================================
+
+repself = True
+
+BaqirSelf_cmd = (
+    "سورس عبود @SSSTlF - حفظ الذاتيه 🧧\n\n"
+    "**⪼** `.تفعيل الذاتيه`\n"
+    "**لـ تفعيـل الحفظ التلقائي للذاتيـه**\n"
+    "**سوف يقوم حسابك بحفظ الذاتيه تلقائياً في حافظة حسابك عندما يرسل لك اي شخص ميديـا ذاتيـه**\n\n"
+    "**⪼** `.تعطيل الذاتيه`\n"
+    "**لـ تعطيـل الحفظ التلقائي للذاتيـه**\n\n"
+    "**⪼** `.ذاتيه`\n"
+    "**بالـرد ؏ــلى صـوره ذاتيـه لحفظهـا في حال كان امر الحفظ التلقائي معطـل**\n\n\n"
+    "**⪼** `.اعلان`\n"
+    "**الامـر + الوقت بالدقائق + الرسـاله**\n"
+    "**امـر مفيـد لجماعـة التمويـل لـ عمـل إعـلان مـؤقت بالقنـوات**\n\n"
+    "\n**سورس عبود** @SSSTlF"
+)
+
+@client.on(events.NewMessage(pattern=r'^\.الذاتيه$'))
+async def cmd(baqir):
+    await edit_or_reply(baqir, BaqirSelf_cmd)
+
+@client.on(events.NewMessage(pattern=r'^\.ذاتيه(?: |$)(.*)'))
+async def oho(event):
+    if not event.is_reply:
+        return await event.edit("**- ❝ ⌊بالـرد علـى صورة ذاتيـة التدميـر**...")
+    e_7_v = await event.get_reply_message()
+    pic = await e_7_v.download_media()
+    await client.send_file("me", pic, caption=f"**⎉╎تم حفـظ الصـورة الذاتيـه .. بنجـاح ☑️**")
+    await event.delete()
+
+@client.on(events.NewMessage(pattern=r'^\.تفعيل الذاتيه$'))
+async def start_datea(event):
+    global repself
+    if repself:
+        return await edit_or_reply(event, "**⎉╎حفظ الذاتيـة التلقـائي .. مفعـله مسبقـاً ☑️**")
+    repself = True
+    await edit_or_reply(event, "**⎉╎تم تفعيـل حفظ الذاتيـة التلقائـي .. بنجـاح ☑️**")
+
+@client.on(events.NewMessage(pattern=r'^\.تعطيل الذاتيه$'))
+async def stop_datea(event):
+    global repself
+    if repself:
+        repself = False
+        return await edit_or_reply(event, "**⎉╎تم تعطيـل حفظ الذاتيـة التلقائـي .. بنجـاح ☑️**")
+    await edit_or_reply(event, "**⎉╎حفظ الذاتيـة التلقـائي .. معطلـه مسبقـاً ☑️**")
+
+@client.on(events.NewMessage(func=lambda e: e.is_private and (e.photo or e.video) and e.media_unread))
+async def sddm(event):
+    global repself
+    baqir = event.sender_id
+    taiba = client.uid
+    if baqir == taiba:
+        return
+    if repself:
+        sender = await event.get_sender()
+        chat = await event.get_chat()
+        pic = await event.download_media()
+        await client.send_file("me", pic, caption=f"**سورس عبود** @SSSTlF - حفظ الذاتيه 🧧 .\n\n⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆\n**⌔╎مࢪحبـاً عـزيـزي المـالك 🫂\n⌔╎ تـم حفـظ الذاتيـة تلقائيـاً .. بنجـاح ☑️** ❝\n**⌔╎المـرسـل** [{sender.first_name}](tg://user?id={sender.id}) .")
+
+# ================================================================
+#                   أوامر الإعلان (Announcement Commands)
+# ================================================================
+
+@client.on(events.NewMessage(pattern=r'^\.اعلان (\d*) ([\s\S]*)'))
+async def selfdestruct(destroy):
+    rep = ("".join(destroy.text.split(maxsplit=1)[1:])).split(" ", 1)
+    message = rep[1]
+    ttl = int(rep[0])
+    baqir = ttl * 60
+    await destroy.delete()
+    smsg = await destroy.client.send_message(destroy.chat_id, message)
+    await asyncio.sleep(baqir)
+    await smsg.delete()
+
+@client.on(events.NewMessage(pattern=r'^\.إعلان (\d*) ([\s\S]*)'))
+async def selfdestruct2(destroy):
+    rep = ("".join(destroy.text.split(maxsplit=1)[1:])).split(" ", 1)
+    message = rep[1]
+    ttl = int(rep[0])
+    baqir = ttl * 60
+    text = message + f"\n\n**- هذا الاعلان سيتم حذفه تلقـائيـاً بعـد {baqir} دقائـق ⏳**"
+    await destroy.delete()
+    smsg = await destroy.client.send_message(destroy.chat_id, text)
+    await asyncio.sleep(baqir)
+    await smsg.delete()
+
+# ================================================================
+#                   أمر الكاشف (Phone Info Command)
+# ================================================================
+
+BaqirPH_cmd = (
+    "سورس عبود @SSSTlF - كاشف الارقام العربية 📲\n\n"
+    "**⪼ الامــر ↵**\n\n"
+    "⪼ `.كاشف` + اسـم الدولـة + الـرقـم بـدون مفتـاح الـدولة\n\n"
+    "**⪼ الوصـف :**\n"
+    "**- لجـلب معلـومـات عـن رقـم هـاتف معيـن**\n\n"
+    "**⪼ مثـال :**\n\n"
+    "`.كاشف اليمن 777887798` \n\n"
+    "`.كاشف السعوديه 555542317` \n\n"
+    "`.كاشف الامارات 43171234` \n\n"
+    "**الامـر يدعـم الـدول التـاليـة ↵** 🇾🇪🇸🇦🇦🇪🇰🇼🇶🇦🇧🇭🇴🇲 \n\n"
+    "🛃 سيتـم اضـافة المزيـد من الدول قريبـاً\n\n"
+    "\n**سورس عبود** @SSSTlF"
+)
+
+@client.on(events.NewMessage(pattern=r'^\.الكاشف$'))
+async def cmd(baqir):
+    await edit_or_reply(baqir, BaqirPH_cmd)
+
+@client.on(events.NewMessage(pattern=r'^\.كاشف ?(.*)'))
+async def _(event):
+    if event.fwd_from:
+        return
+    input_str = event.pattern_match.group(1)
+    if event.reply_to_msg_id and not event.pattern_match.group(1):
+        reply_to_id = await event.get_reply_message()
+        reply_to_id = str(reply_to_id.message)
+    else:
+        reply_to_id = str(event.pattern_match.group(1))
+    if not reply_to_id:
+        return await edit_or_reply(
+            event, "**╮ . كـاشف الاࢪقـام الـ؏ـࢪبيـة 📲.. اࢪسـل** `.الكاشف` **للتعليـمات**"
+        )
+    chat = "@Zelzalybot"
+    zzzzl1l = await edit_or_reply(event, "**╮•⎚ جـارِ الكـشف ؏ــن الـرقـم  📲 ⌭ . . .**")
+    async with event.client.conversation(chat) as conv:
+        try:
+            response = conv.wait_event(
+                events.NewMessage(incoming=True, from_users=1194140165)
+            )
+            await event.client.send_message(chat, "{}".format(input_str))
+            response = await response
+            await event.client.send_read_acknowledge(conv.chat_id)
+        except YouBlockedUserError:
+            await zzzzl1l.edit("**╮•⎚ تحـقق من انـك لم تقـم بحظر البوت @Zelzalybot .. ثم اعـد استخدام الامـر ...🤖♥️**")
+            return
+        if response.text.startswith("I can't find that"):
+            await zzzzl1l.edit("**╮•⎚ عـذراً .. لـم استطـع ايجـاد المطلـوب ☹️💔**")
+        else:
+            await zzzzl1l.delete()
+            await event.client.send_message(event.chat_id, response.message)
+
+# ================================================================
 #                   مرشح الرسائل (Message Filter)
 # ================================================================
 
@@ -1976,7 +2965,7 @@ async def add_time_to_message(event):
         print(f"❌ خطأ في تحديث الاسم: {e}")
 
 # ================================================================
-#                   التشغيل الرئيسي (Main) - المُعدّل للاستقرار
+#                   التشغيل الرئيسي (Main)
 # ================================================================
 
 async def main():
@@ -1991,13 +2980,13 @@ async def main():
         asyncio.create_task(keep_alive())
         
         print("✅ البوت جاهز لاستقبال الأوامر")
+        print("✧ سورس عبود ✧ @SSSTlF")
         
         # استمرار التشغيل
         await client.run_until_disconnected()
         
     except Exception as e:
         print(f"❌ خطأ في التشغيل: {e}")
-        # محاولة إعادة التشغيل بعد 5 ثواني
         print("🔄 محاولة إعادة التشغيل بعد 5 ثواني...")
         await asyncio.sleep(5)
         sys.exit(1)
