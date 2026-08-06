@@ -1,1 +1,18 @@
-
+def media_type(msg):
+    if msg.photo:
+        return "photo"
+    if msg.video:
+        return "video"
+    if msg.audio:
+        return "audio"
+    if msg.document:
+        return "document"
+    if msg.sticker:
+        return "sticker"
+    if msg.gif:
+        return "gif"
+    if msg.voice:
+        return "voice"
+    if msg.round:
+        return "round"
+    return None
