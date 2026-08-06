@@ -13,6 +13,23 @@ from telethon.tl.types import MessageMediaPhoto
 from telethon.errors import FloodWaitError, PhoneNumberInvalidError, PhoneCodeInvalidError, SessionPasswordNeededError
 from telethon.tl.functions.account import UpdateProfileRequest
 
+# ========== إعدادات التحميل ==========
+try:
+    from .. import download_yt, get_yt_link, is_url_work, Tepthon_cmd
+except ImportError:
+    # تعريف دوال مؤقتة في حالة عدم وجود المكتبات
+    async def download_yt(jmbot, url, ytd):
+        await jmbot.eor("⚠️ مكتبة التحميل غير مثبتة")
+    
+    def get_yt_link(query, ytd):
+        return None
+    
+    async def is_url_work(url):
+        return True
+    
+    def Tepthon_cmd(pattern):
+        return lambda func: func
+
 # ========== إعدادات البوت ==========
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
@@ -33,6 +50,15 @@ install_client = None
 install_step = "phone"
 install_hash = None
 install_password = None
+
+# ========== إعدادات تحميل اليوتيوب ==========
+ytd = {
+    "prefer_ffmpeg": True,
+    "addmetadata": True,
+    "geo-bypass": True,
+    "nocheckcertificate": True,
+    "postprocessors": [{"key": "FFmpegMetadata"}],
+}
 
 # ========== قائمة الحكم والكلمات ==========
 QUOTES = [
@@ -103,6 +129,155 @@ async def keep_alive():
                 print("❌ فشل إعادة الاتصال")
         await asyncio.sleep(600)
 
+# ========== دوال التحميل ==========
+async def download_audio(event, url):
+    """تحميل ملف صوتي من رابط"""
+    ytd_copy = ytd.copy()
+    ytd_copy["format"] = "bestaudio"
+    ytd_copy["outtmpl"] = "%(id)s.m4a"
+    ytd_copy["postprocessors"] = [
+        {
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "m4a",
+            "preferredquality": "128",
+        },
+        {"key": "FFmpegMetadata"}
+    ]
+    
+    try:
+        await download_yt(event, url, ytd_copy)
+    except Exception as e:
+        await event.reply(f"❌ خطأ في التحميل: {str(e)}")
+
+async def download_video(event, url):
+    """تحميل فيديو من رابط"""
+    ytd_copy = ytd.copy()
+    ytd_copy["format"] = "best"
+    ytd_copy["outtmpl"] = "%(id)s.mp4"
+    ytd_copy["postprocessors"] = [
+        {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
+        {"key": "FFmpegMetadata"}
+    ]
+    
+    try:
+        await download_yt(event, url, ytd_copy)
+    except Exception as e:
+        await event.reply(f"❌ خطأ في التحميل: {str(e)}")
+
+# ========== أوامر التحميل الجديدة ==========
+@client.on(events.NewMessage(pattern=r'^\.تحميل صوتي (.+)$'))
+async def download_audio_command(event):
+    """تحميل صوتي من رابط"""
+    if not await is_owner(event):
+        return
+    
+    url = event.pattern_match.group(1).strip()
+    if not url:
+        await event.reply("❌ يجب عليك وضع رابط للتحميل الصوتي")
+        return
+    
+    try:
+        await is_url_work(url)
+    except Exception:
+        await event.reply("❌ الرابط غير صحيح أو لا يعمل")
+        return
+    
+    await event.reply("🎵 جاري تحميل الملف الصوتي...")
+    await download_audio(event, url)
+
+@client.on(events.NewMessage(pattern=r'^\.تحميل فيد (.+)$'))
+async def download_video_command(event):
+    """تحميل فيديو من رابط"""
+    if not await is_owner(event):
+        return
+    
+    url = event.pattern_match.group(1).strip()
+    if not url:
+        await event.reply("❌ يجب عليك وضع رابط لتحميل الفيديو")
+        return
+    
+    try:
+        await is_url_work(url)
+    except Exception:
+        await event.reply("❌ الرابط غير صحيح أو لا يعمل")
+        return
+    
+    await event.reply("🎬 جاري تحميل الفيديو...")
+    await download_video(event, url)
+
+@client.on(events.NewMessage(pattern=r'^\.صوتي(?: (.+))?$'))
+async def search_audio_command(event):
+    """تحميل صوتي بالبحث عن عنوان"""
+    if not await is_owner(event):
+        return
+    
+    query = event.pattern_match.group(1) if event.pattern_match.group(1) else None
+    if not query:
+        await event.reply("❌ يجب عليك تحديد ما تريد تحميله، اكتب عنوان مع الأمر")
+        return
+    
+    await event.reply(f"🎵 جاري البحث عن: **{query}**...")
+    
+    try:
+        ytd_copy = ytd.copy()
+        ytd_copy["format"] = "bestaudio"
+        ytd_copy["outtmpl"] = "%(id)s.m4a"
+        ytd_copy["postprocessors"] = [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "m4a",
+                "preferredquality": "128",
+            },
+            {"key": "FFmpegMetadata"}
+        ]
+        
+        url = get_yt_link(query, ytd_copy)
+        if not url:
+            await event.reply("❌ لم يتم العثور على الفيديو، اكتب عنوان مفصل بشكل صحيح")
+            return
+        
+        await event.reply("🎵 جاري تحميل الملف الصوتي...")
+        await download_yt(event, url, ytd_copy)
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
+
+# ========== أمر المساعدة مع الأوامر الجديدة ==========
+@client.on(events.NewMessage(pattern=r'^\.الاوامر$'))
+async def help_command(event):
+    """عرض جميع الأوامر المتاحة"""
+    if not await is_owner(event):
+        return
+    
+    help_text = """
+✧ **قائمة الأوامر** ✧
+
+**⏰ أوامر الوقت:**
+◙ `.تفعيل الوقت` - تفعيل عرض الوقت في الاسم
+◙ `.تعطيل الوقت` - تعطيل عرض الوقت في الاسم
+
+**📥 أوامر التحميل:**
+◙ `.تحميل صوتي` <رابط> - تحميل صوت من رابط يوتيوب أو أي منصة
+◙ `.تحميل فيد` <رابط> - تحميل فيديو من رابط يوتيوب أو أي منصة
+◙ `.صوتي` <عنوان> - تحميل صوت بالبحث عن العنوان
+
+**📋 أوامر المعلومات:**
+◙ `.ا` - عرض معلومات حسابك
+◙ `.المطور` - عرض معلومات المطور
+◙ `.ايدي` - عرض معرفك ومعلومات المحادثة
+
+**🔍 أوامر البحث:**
+◙ `.بحث` <نص> - البحث في جوجل
+◙ `.فيديو` <اسم> - البحث عن فيديو في يوتيوب
+◙ `.اغنية` <اسم> - البحث عن أغنية في يوتيوب
+
+**📖 أوامر أخرى:**
+◙ `.كت` - عرض حكمة عشوائية
+◙ `.تنصيب` - تنصيب البوت تلقائياً
+
+✧ سورس عبود ✧
+"""
+    await event.reply(help_text)
+
 # ========== معالج الرسائل ==========
 @client.on(events.NewMessage(outgoing=True))
 async def add_time_to_message(event):
@@ -122,7 +297,7 @@ async def add_time_to_message(event):
     except Exception as e:
         print(f"❌ خطأ في تحديث الاسم: {e}")
 
-# ========== معالج التنصيب التلقائي (مُصلح بالكامل) ==========
+# ========== معالج التنصيب التلقائي ==========
 @client.on(events.NewMessage(incoming=True))
 async def handle_install_input(event):
     global install_waiting, install_user_id, install_phone, install_client, install_step, install_hash, install_password
