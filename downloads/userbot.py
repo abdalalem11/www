@@ -24,7 +24,8 @@ from telethon.tl.types import (
     ChannelParticipantAdmin, 
     InputPeerUser, 
     MessageEntityMentionName,
-    ChannelParticipantsKicked
+    ChannelParticipantsKicked,
+    KeyboardButtonCallback
 )
 from telethon.errors import (
     FloodWaitError, 
@@ -479,88 +480,139 @@ async def fetch_info(replied_user, event):
     return photo, caption
 
 # ================================================================
-#                        حلقات الخلفية
+#                   دوال الأزرار (Buttons Functions)
 # ================================================================
 
-async def keep_alive():
-    """إبقاء البوت نشطاً"""
-    while True:
-        try:
-            me = await client.get_me()
-            await client.send_message(me.id, f"🔄 البوت يعمل... {datetime.now().strftime('%H:%M')}")
-            print(f"✅ تم إرسال إشارة Keep-Alive في {datetime.now()}")
-        except Exception as e:
-            print(f"❌ خطأ في Keep-Alive: {e}")
-            try:
-                await client.disconnect()
-                await client.start()
-                print("✅ تم إعادة الاتصال")
-            except:
-                print("❌ فشل إعادة الاتصال")
-        await asyncio.sleep(600)
+def create_command_buttons(commands_list, columns=2):
+    """إنشاء أزرار للأوامر مع خاصية النسخ التلقائي"""
+    buttons = []
+    row = []
+    for i, cmd in enumerate(commands_list):
+        # كل زر يرسل الأمر مباشرة عند الضغط عليه
+        row.append(Button.inline(f"📋 {cmd}", data=f"cmd:{cmd}"))
+        if len(row) == columns:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    return buttons
 
-async def digitalpic_loop():
-    """حلقة الصورة الوقتية"""
-    global digitalpic_running
-    i = 0
-    while digitalpic_running:
-        digitalpic_path = gvarstatus("DIGITAL_PIC_PATH") or "digital_pic.png"
-        if not os.path.exists(digitalpic_path):
-            print("❌ الصورة الوقتية غير موجودة")
-            await asyncio.sleep(CHANGE_TIME)
-            continue
-        
-        autophoto_path = "photo_pfp.png"
-        shutil.copy(digitalpic_path, autophoto_path)
-        current_time = datetime.now().strftime("%I:%M")
-        
-        try:
-            img = Image.open(autophoto_path)
-            drawn_text = ImageDraw.Draw(img)
-            fnt = ImageFont.truetype("DejaVuSansMono.ttf", 35)
-            drawn_text.text((140, 70), current_time, font=fnt, fill=(255, 255, 255))
-            img.save(autophoto_path)
-            
-            file = await client.upload_file(autophoto_path)
-            if i > 0:
-                await client(functions.photos.DeletePhotosRequest(
-                    await client.get_profile_photos("me", limit=1)
-                ))
-            i += 1
-            await client(functions.photos.UploadProfilePhotoRequest(file))
-            os.remove(autophoto_path)
-        except Exception as e:
-            print(f"❌ خطأ في الصورة الوقتية: {e}")
-        
-        await asyncio.sleep(CHANGE_TIME)
+# ================================================================
+#                   معالج الضغط على الأزرار (Callback Handler)
+# ================================================================
 
-async def autoname_loop():
-    """حلقة الاسم الوقتي"""
-    global autoname_running
-    while autoname_running:
-        HM = time.strftime("%I:%M")
-        name = f"⏰ {HM}"
-        try:
-            await client(functions.account.UpdateProfileRequest(last_name=name))
-        except FloodWaitError as ex:
-            await asyncio.sleep(ex.seconds)
-        except Exception as e:
-            print(f"❌ خطأ في الاسم الوقتي: {e}")
-        await asyncio.sleep(CHANGE_TIME)
+@client.on(events.CallbackQuery)
+async def callback_handler(event):
+    """معالج الضغط على الأزرار - يرسل الأمر تلقائياً"""
+    try:
+        data = event.data.decode('utf-8')
+        if data.startswith("cmd:"):
+            command = data[4:]  # استخراج الأمر بعد "cmd:"
+            # إرسال الأمر كما لو كان المستخدم كتبه
+            await event.client.send_message(event.chat_id, command)
+            # إظهار رسالة تأكيد للمستخدم مع إخفائها بعد ثانية
+            await event.answer(f"✅ تم إرسال: {command}", alert=False)
+            # حذف رسالة التأكيد المؤقتة
+            await asyncio.sleep(0.5)
+    except Exception as e:
+        print(f"❌ خطأ في معالج الأزرار: {e}")
 
-async def autobio_loop():
-    """حلقة البايو الوقتي"""
-    global autobio_running
-    while autobio_running:
-        HM = time.strftime("%I:%M")
-        bio = f"الحمد لله ⏐ {HM}"
-        try:
-            await client(functions.account.UpdateProfileRequest(about=bio))
-        except FloodWaitError as ex:
-            await asyncio.sleep(ex.seconds)
-        except Exception as e:
-            print(f"❌ خطأ في البايو الوقتي: {e}")
-        await asyncio.sleep(CHANGE_TIME)
+# ================================================================
+#                   قائمة الأوامر مع أزرار (Commands List with Buttons)
+# ================================================================
+
+@client.on(events.NewMessage(pattern=r'^\.الاوامر$'))
+async def show_commands(event):
+    if not await is_owner(event):
+        return
+    
+    # تقسيم الأوامر إلى مجموعات
+    commands = [
+        # مجموعة التنصيب
+        [".تنصيب", ".تنصيب جلسة"],
+        
+        # مجموعة الحماية
+        [".قفل", ".فتح", ".الحاله", ".البوتات", ".البوتات طرد"],
+        
+        # مجموعة المجموعة
+        [".تفليش", ".تصفير", ".الاعضاء", ".المشرفين", ".المعلومات", ".المحذوفين", ".المحذوفين تنظيف", ".مسح المحظورين", ".غادر", ".تاك"],
+        
+        # مجموعة التحميل
+        [".تحميل صوتي", ".تحميل فيد", ".صوتي"],
+        
+        # مجموعة المعلومات
+        [".ا", ".ايدي", ".ايديي", ".اسمي", ".كشف", ".id", ".stat", ".رابط الحساب"],
+        
+        # مجموعة البحث
+        [".بحث", ".فيديو", ".اغنية"],
+        
+        # مجموعة الوقت
+        [".تفعيل الوقت", ".تعطيل الوقت", ".صوره وقتيه", ".اسم وقتي", ".بايو وقتي", ".ايقاف"],
+        
+        # مجموعة التسلية
+        [".كت", ".نسبه الحب"],
+        
+        # مجموعة أخرى
+        [".مساعده"]
+    ]
+    
+    # إنشاء الأزرار
+    buttons = []
+    for cmd_list in commands:
+        row = []
+        for cmd in cmd_list:
+            row.append(Button.inline(f"📋 {cmd}", data=f"cmd:{cmd}"))
+        buttons.append(row)
+    
+    # إضافة زر مساعدة
+    buttons.append([Button.inline("❓ مساعدة", data="cmd:.مساعده")])
+    
+    # إرسال الرسالة مع الأزرار
+    await event.reply("""
+✧ **قائمة الأوامر الرئيسية** ✧
+
+📌 **اضغط على أي أمر لنسخه وإرساله تلقائياً**
+
+✧ سورس عبود ✧
+""", buttons=buttons)
+
+@client.on(events.NewMessage(pattern=r'^\.مساعده$'))
+async def help_command(event):
+    if not await is_owner(event):
+        return
+    
+    # إنشاء أزرار المساعدة
+    help_buttons = [
+        [
+            Button.inline("📥 تنصيب", data="cmd:.تنصيب"),
+            Button.inline("📥 تنصيب جلسة", data="cmd:.تنصيب جلسة")
+        ],
+        [
+            Button.inline("🛡️ حماية", data="cmd:.الحاله"),
+            Button.inline("👥 مجموعة", data="cmd:.المعلومات")
+        ],
+        [
+            Button.inline("📥 تحميل", data="cmd:.صوتي"),
+            Button.inline("📋 معلومات", data="cmd:.ا")
+        ],
+        [
+            Button.inline("🔍 بحث", data="cmd:.بحث"),
+            Button.inline("⏰ وقت", data="cmd:.تفعيل الوقت")
+        ],
+        [
+            Button.inline("🎭 تسلية", data="cmd:.كت"),
+            Button.inline("📖 الأوامر", data="cmd:.الاوامر")
+        ]
+    ]
+    
+    help_text = """
+✧ **قائمة المساعدة السريعة** ✧
+
+📌 **اضغط على أي زر لنسخ الأمر وإرساله**
+
+✧ سورس عبود ✧
+"""
+    await event.reply(help_text, buttons=help_buttons)
 
 # ================================================================
 #                   أمر التنصيب بالجلسة (Install Session)
@@ -1800,146 +1852,6 @@ async def stop_auto(event):
         await event.reply("✅ تم إيقاف البايو الوقتي")
     else:
         await event.reply("❌ خيار غير معروف\nالخيارات: صوره وقتيه, اسم وقتي, بايو وقتي")
-
-# ================================================================
-#                   قائمة الأوامر (Commands List)
-# ================================================================
-
-@client.on(events.NewMessage(pattern=r'^\.الاوامر$'))
-async def show_commands(event):
-    if not await is_owner(event):
-        return
-    
-    commands_text = """
-✧ **قائمة الأوامر الرئيسية** ✧
-
-**📥 أوامر التنصيب:**
-◙ `.تنصيب` - تنصيب البوت بالرقم والرمز
-◙ `.تنصيب جلسة` - تنصيب البوت بالجلسة المستخرجة
-
-**🛡️ أوامر الحماية:**
-◙ `.قفل <نوع>` - قفل خاصية
-◙ `.فتح <نوع>` - فتح خاصية
-◙ `.الحاله` - عرض حالة الحماية
-◙ `.البوتات` - كشف البوتات
-◙ `.البوتات طرد` - طرد جميع البوتات
-
-**👥 أوامر المجموعة:**
-◙ `.تفليش` - حظر جميع الأعضاء
-◙ `.تصفير` - طرد جميع الأعضاء
-◙ `.الاعضاء` - عرض قائمة الأعضاء
-◙ `.المشرفين` - عرض قائمة المشرفين
-◙ `.المعلومات` - معلومات المجموعة
-◙ `.المحذوفين` - عرض الحسابات المحذوفة
-◙ `.المحذوفين تنظيف` - حظر الحسابات المحذوفة
-◙ `.مسح المحظورين` - مسح جميع المحظورين
-◙ `.غادر` - مغادرة المجموعة
-◙ `.تاك <نص>` - تاك جميع الأعضاء
-
-**📥 أوامر التحميل:**
-◙ `.تحميل صوتي <رابط>` - تحميل صوت
-◙ `.تحميل فيد <رابط>` - تحميل فيديو
-◙ `.صوتي <عنوان>` - تحميل صوت بالبحث
-
-**📋 أوامر المعلومات:**
-◙ `.ا` - معلومات حسابك
-◙ `.ايدي` - معلومات الشخص
-◙ `.ايديي` - عرض ايديك فقط
-◙ `.اسمي` - عرض اسمك
-◙ `.كشف` - معلومات مفصلة عن الشخص
-◙ `.id` - عرض الايدي فقط
-◙ `.stat` - إحصائيات الحساب
-◙ `.رابط الحساب` - رابط حساب الشخص
-
-**🔍 أوامر البحث:**
-◙ `.بحث <نص>` - البحث في جوجل
-◙ `.فيديو <اسم>` - البحث عن فيديو
-◙ `.اغنية <اسم>` - البحث عن أغنية
-
-**⏰ أوامر الوقت:**
-◙ `.تفعيل الوقت` - تفعيل عرض الوقت
-◙ `.تعطيل الوقت` - تعطيل عرض الوقت
-◙ `.صوره وقتيه` - تفعيل الصورة الوقتية
-◙ `.اسم وقتي` - تفعيل الاسم الوقتي
-◙ `.بايو وقتي` - تفعيل البايو الوقتي
-◙ `.ايقاف <نوع>` - إيقاف الوقتية
-
-**🎭 أوامر التسلية:**
-◙ `.كت` - حكمة عشوائية
-◙ `.نسبه الحب <اسم1, اسم2>` - نسبة الحب
-
-✧ **سورس عبود** ✧
-"""
-    await event.reply(commands_text)
-
-@client.on(events.NewMessage(pattern=r'^\.مساعده$'))
-async def help_command(event):
-    if not await is_owner(event):
-        return
-    
-    help_text = """
-✧ **قائمة المساعدة التفصيلية** ✧
-
-**📥 أوامر التنصيب:**
-◙ `.تنصيب` - تنصيب البوت بالرقم والرمز
-◙ `.تنصيب جلسة` - تنصيب البوت بالجلسة المستخرجة (بدون رمز)
-
-**🛡️ أوامر الحماية:**
-◙ `.قفل <نوع>` - قفل خاصية (البوتات، المعرفات، الدخول، الاضافه، التوجيه، الميديا، الانلاين، الفشار، الروابط، الفارسيه، الكل)
-◙ `.فتح <نوع>` - فتح خاصية
-◙ `.الحاله` - عرض حالة الحماية
-◙ `.البوتات` - كشف البوتات
-◙ `.البوتات طرد` - طرد جميع البوتات
-
-**👥 أوامر المجموعة:**
-◙ `.تفليش` - حظر جميع الأعضاء (ما عدا المشرفين)
-◙ `.تصفير` - طرد جميع الأعضاء (ما عدا المشرفين)
-◙ `.الاعضاء` - عرض قائمة جميع الأعضاء
-◙ `.المشرفين` - عرض قائمة المشرفين
-◙ `.المعلومات` - عرض معلومات المجموعة
-◙ `.المحذوفين` - عرض الحسابات المحذوفة
-◙ `.المحذوفين تنظيف` - حظر الحسابات المحذوفة
-◙ `.مسح المحظورين` - مسح جميع المحظورين
-◙ `.غادر` - مغادرة المجموعة
-◙ `.تاك <نص>` - تاك جميع الأعضاء مع نص
-
-**📥 أوامر التحميل:**
-◙ `.تحميل صوتي <رابط>` - تحميل صوت من رابط
-◙ `.تحميل فيد <رابط>` - تحميل فيديو من رابط
-◙ `.صوتي <عنوان>` - تحميل صوت بالبحث
-
-**📋 أوامر المعلومات:**
-◙ `.ا` - عرض معلومات حسابك
-◙ `.ايدي` - عرض معلومات الشخص مع الصورة
-◙ `.ايديي` - عرض ايديك فقط
-◙ `.اسمي` - عرض اسمك
-◙ `.كشف` - معلومات مفصلة عن الشخص
-◙ `.id` - عرض الايدي فقط
-◙ `.stat` - عرض إحصائيات الحساب
-◙ `.رابط الحساب` - إنشاء رابط لحساب الشخص
-
-**⏰ أوامر الوقت:**
-◙ `.تفعيل الوقت` - تفعيل عرض الوقت في الاسم
-◙ `.تعطيل الوقت` - تعطيل عرض الوقت
-◙ `.صوره وقتيه` - تفعيل الصورة الوقتية
-◙ `.اسم وقتي` - تفعيل الاسم الوقتي
-◙ `.بايو وقتي` - تفعيل البايو الوقتي
-◙ `.ايقاف صوره وقتيه` - إيقاف الصورة الوقتية
-◙ `.ايقاف اسم وقتي` - إيقاف الاسم الوقتي
-◙ `.ايقاف بايو وقتي` - إيقاف البايو الوقتي
-
-**🔍 أوامر البحث:**
-◙ `.بحث <نص>` - البحث في جوجل
-◙ `.فيديو <اسم>` - البحث عن فيديو
-◙ `.اغنية <اسم>` - البحث عن أغنية
-
-**🎭 أوامر التسلية:**
-◙ `.كت` - عرض حكمة عشوائية
-◙ `.نسبه الحب <اسم1, اسم2>` - نسبة الحب بين شخصين
-
-✧ سورس عبود ✧
-"""
-    await event.reply(help_text)
 
 # ================================================================
 #                   مرشح الرسائل (Message Filter)
