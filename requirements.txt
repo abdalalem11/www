@@ -4,8 +4,9 @@ pytz
 pyaes
 rsa
 requests
-pillow
+Pillow
 pySmartDL
 emoji
 prettytable
 pathlib
+cryptg
