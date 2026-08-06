@@ -491,110 +491,94 @@ async def protection_filter(event):
             except:
                 pass
 
-# ========== أوامر المساعدة الجديدة من ريبثون ==========
-@client.on(events.NewMessage(pattern=r'^\.مساعده$'))
-async def help_command(event):
-    """عرض قائمة المساعدة التفصيلية"""
+# ========== معالج التنصيب التلقائي ==========
+@client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
+async def install_bot(event):
+    global install_waiting, install_user_id, install_step
+    
     if not await is_owner(event):
+        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
         return
     
-    help_text = """
-✧ **قائمة الأوامر الرئيسية** ✧
-
-**🛡️ أوامر الحماية:**
-◙ `.قفل <نوع>` - قفل خاصية (البوتات، المعرفات، الدخول، الاضافه، التوجيه، الميديا، الانلاين، الفشار، الروابط، الفارسيه، الكل)
-◙ `.فتح <نوع>` - فتح خاصية
-◙ `.الحاله` - عرض حالة الحماية
-◙ `.البوتات` - كشف البوتات
-◙ `.البوتات طرد` - طرد جميع البوتات
-
-**📥 أوامر التحميل:**
-◙ `.تحميل صوتي <رابط>` - تحميل صوت من رابط
-◙ `.تحميل فيد <رابط>` - تحميل فيديو من رابط
-◙ `.صوتي <عنوان>` - تحميل صوت بالبحث
-
-**📋 أوامر المعلومات:**
-◙ `.ا` - عرض معلومات حسابك
-◙ `.المطور` - عرض معلومات المطور
-◙ `.ايدي` - عرض معرفك ومعلومات المحادثة
-
-**🔍 أوامر البحث:**
-◙ `.بحث <نص>` - البحث في جوجل
-◙ `.فيديو <اسم>` - البحث عن فيديو
-◙ `.اغنية <اسم>` - البحث عن أغنية
-
-**📖 أوامر أخرى:**
-◙ `.كت` - عرض حكمة عشوائية
-◙ `.تنصيب` - تنصيب البوت تلقائياً
-◙ `.الاوامر` - عرض هذه القائمة
-
-✧ سورس عبود ✧
-"""
-    await event.reply(help_text)
-
-# ========== أوامر الحساب ==========
-@client.on(events.NewMessage(pattern=r'^\.ايديي$'))
-async def my_id_command(event):
-    """عرض الايدي الخاص بك"""
-    if not await is_owner(event):
-        return
-    me = await client.get_me()
-    await event.reply(f"📋 ايديك: `{me.id}`")
-
-@client.on(events.NewMessage(pattern=r'^\.اسمي$'))
-async def my_name_command(event):
-    """عرض اسمك"""
-    if not await is_owner(event):
-        return
-    me = await client.get_me()
-    await event.reply(f"📛 اسمك: {me.first_name} {me.last_name or ''}")
-
-# ========== أوامر التسلية ==========
-@client.on(events.NewMessage(pattern=r'^\.كت$'))
-async def quote_command(event):
-    if not await is_owner(event):
-        return
     try:
-        quote = random.choice(QUOTES)
-        text = f"""
-✧ حكمة ✧
+        install_waiting = True
+        install_user_id = event.sender_id
+        install_step = "phone"
+        
+        await event.reply("""
+📥 **أمر التنصيب التلقائي**
 
-{quote}
-
-✧ سورس عبود ✧"""
-        await event.reply(text)
-    except Exception as e:
-        await event.reply(f"❌ خطأ: {str(e)}")
-
-@client.on(events.NewMessage(pattern=r'^\.نسبه الحب(?: (.+))?$'))
-async def love_percent(event):
-    """نسبة الحب بين شخصين"""
-    if not await is_owner(event):
-        return
-    
-    text = event.pattern_match.group(1) if event.pattern_match.group(1) else ""
-    if not text:
-        await event.reply("❌ اكتب اسمين مفصولين بفاصلة\nمثال: `.نسبه الحب احمد, سارة`")
-        return
-    
-    names = [name.strip() for name in text.split(',')]
-    if len(names) < 2:
-        await event.reply("❌ اكتب اسمين مفصولين بفاصلة")
-        return
-    
-    percent = random.randint(0, 100)
-    heart = "❤️" * (percent // 10) + "🖤" * (10 - percent // 10)
-    
-    await event.reply(f"""
-✧ **نسبة الحب** ✧
-
-💑 {names[0]} 🤝 {names[1]}
-
-💕 النسبة: **{percent}%**
-{heart}
+📌 أرسل الآن رقم هاتفك مع مفتاح الدولة
+📱 مثال: `+9665XXXXXXXX`
 
 ✧ سورس عبود ✧
 """)
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
+        install_waiting = False
+
+@client.on(events.NewMessage(incoming=True))
+async def handle_install_input(event):
+    global install_waiting, install_user_id, install_phone, install_client, install_step, install_hash
+
+    if not install_waiting or event.sender_id != install_user_id or event.text.startswith('.'):
+        return
+
+    try:
+        if install_step == "phone":
+            phone = event.text.strip()
+            install_phone = phone
+            install_client = TelegramClient(StringSession(), API_ID, API_HASH)
+            await install_client.connect()
+            
+            try:
+                result = await install_client.send_code_request(phone)
+                install_hash = result.phone_code_hash
+                await event.reply(f"📱 تم استقبال الرقم: `{phone}`\n⏳ أرسل رمز التحقق الآن")
+                install_step = "code"
+            except Exception as e:
+                await event.reply(f"❌ خطأ: {str(e)}")
+                install_waiting = False
+
+        elif install_step == "code":
+            code = event.text.strip()
+            try:
+                await install_client.sign_in(phone=install_phone, code=code, phone_code_hash=install_hash)
+                me = await install_client.get_me()
+                new_session = install_client.session.save()
+                CONFIG["session_string"] = new_session
+                save_config()
+                await event.reply(f"✅ تم التنصيب بنجاح!\n📋 المعرف: `{me.id}`")
+                await install_client.disconnect()
+                await client.disconnect()
+                subprocess.Popen([sys.executable, __file__])
+                sys.exit(0)
+            except SessionPasswordNeededError:
+                await event.reply("🔐 مطلوب كلمة مرور الخطوتين، أرسلها الآن")
+                install_step = "password"
+            except Exception as e:
+                await event.reply(f"❌ خطأ: {str(e)}")
+                install_waiting = False
+
+        elif install_step == "password":
+            password = event.text.strip()
+            try:
+                await install_client.sign_in(password=password)
+                me = await install_client.get_me()
+                new_session = install_client.session.save()
+                CONFIG["session_string"] = new_session
+                save_config()
+                await event.reply(f"✅ تم التنصيب بنجاح!\n📋 المعرف: `{me.id}`")
+                await install_client.disconnect()
+                await client.disconnect()
+                subprocess.Popen([sys.executable, __file__])
+                sys.exit(0)
+            except Exception as e:
+                await event.reply(f"❌ كلمة المرور غير صحيحة: {str(e)}")
+
+    except Exception as e:
+        await event.reply(f"❌ خطأ عام: {str(e)}")
+        install_waiting = False
 
 # ========== أوامر الوقت ==========
 @client.on(events.NewMessage(pattern=r'^\.تفعيل الوقت$'))
@@ -730,6 +714,22 @@ async def get_id(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
+@client.on(events.NewMessage(pattern=r'^\.ايديي$'))
+async def my_id_command(event):
+    """عرض الايدي الخاص بك"""
+    if not await is_owner(event):
+        return
+    me = await client.get_me()
+    await event.reply(f"📋 ايديك: `{me.id}`")
+
+@client.on(events.NewMessage(pattern=r'^\.اسمي$'))
+async def my_name_command(event):
+    """عرض اسمك"""
+    if not await is_owner(event):
+        return
+    me = await client.get_me()
+    await event.reply(f"📛 اسمك: {me.first_name} {me.last_name or ''}")
+
 @client.on(events.NewMessage(pattern=r'^\.بحث (.+)'))
 async def search_command(event):
     if not await is_owner(event):
@@ -796,6 +796,144 @@ async def audio_command(event):
         await event.reply(text)
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'^\.كت$'))
+async def quote_command(event):
+    if not await is_owner(event):
+        return
+    try:
+        quote = random.choice(QUOTES)
+        text = f"""
+✧ حكمة ✧
+
+{quote}
+
+✧ سورس عبود ✧"""
+        await event.reply(text)
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
+
+# ========== أوامر التسلية ==========
+@client.on(events.NewMessage(pattern=r'^\.نسبه الحب(?: (.+))?$'))
+async def love_percent(event):
+    """نسبة الحب بين شخصين"""
+    if not await is_owner(event):
+        return
+    
+    text = event.pattern_match.group(1) if event.pattern_match.group(1) else ""
+    if not text:
+        await event.reply("❌ اكتب اسمين مفصولين بفاصلة\nمثال: `.نسبه الحب احمد, سارة`")
+        return
+    
+    names = [name.strip() for name in text.split(',')]
+    if len(names) < 2:
+        await event.reply("❌ اكتب اسمين مفصولين بفاصلة")
+        return
+    
+    percent = random.randint(0, 100)
+    heart = "❤️" * (percent // 10) + "🖤" * (10 - percent // 10)
+    
+    await event.reply(f"""
+✧ **نسبة الحب** ✧
+
+💑 {names[0]} 🤝 {names[1]}
+
+💕 النسبة: **{percent}%**
+{heart}
+
+✧ سورس عبود ✧
+""")
+
+# ========== أمر عرض الأوامر ==========
+@client.on(events.NewMessage(pattern=r'^\.الاوامر$'))
+async def show_commands(event):
+    """عرض جميع الأوامر المتاحة"""
+    if not await is_owner(event):
+        return
+    
+    commands_text = """
+✧ **قائمة الأوامر** ✧
+
+**🛡️ أوامر الحماية:**
+◙ `.قفل <نوع>` - قفل خاصية
+◙ `.فتح <نوع>` - فتح خاصية
+◙ `.الحاله` - عرض حالة الحماية
+◙ `.البوتات` - كشف البوتات
+◙ `.البوتات طرد` - طرد جميع البوتات
+
+**📥 أوامر التحميل:**
+◙ `.تحميل صوتي <رابط>` - تحميل صوت
+◙ `.تحميل فيد <رابط>` - تحميل فيديو
+◙ `.صوتي <عنوان>` - تحميل صوت بالبحث
+
+**📋 أوامر المعلومات:**
+◙ `.ا` - معلومات حسابك
+◙ `.المطور` - معلومات المطور
+◙ `.ايدي` - معرفك ومعلومات المحادثة
+◙ `.ايديي` - عرض ايديك فقط
+◙ `.اسمي` - عرض اسمك
+
+**🔍 أوامر البحث:**
+◙ `.بحث <نص>` - البحث في جوجل
+◙ `.فيديو <اسم>` - البحث عن فيديو
+◙ `.اغنية <اسم>` - البحث عن أغنية
+
+**⏰ أوامر الوقت:**
+◙ `.تفعيل الوقت` - تفعيل عرض الوقت
+◙ `.تعطيل الوقت` - تعطيل عرض الوقت
+
+**🎭 أوامر التسلية:**
+◙ `.كت` - حكمة عشوائية
+◙ `.نسبه الحب <اسم1, اسم2>` - نسبة الحب
+
+**📖 أوامر أخرى:**
+◙ `.تنصيب` - تنصيب البوت تلقائياً
+◙ `.مساعده` - عرض المساعدة
+◙ `.الاوامر` - عرض هذه القائمة
+
+✧ **سورس عبود** ✧
+"""
+    await event.reply(commands_text)
+
+@client.on(events.NewMessage(pattern=r'^\.مساعده$'))
+async def help_command(event):
+    """عرض قائمة المساعدة التفصيلية"""
+    if not await is_owner(event):
+        return
+    
+    help_text = """
+✧ **قائمة المساعدة التفصيلية** ✧
+
+**🛡️ أوامر الحماية:**
+◙ `.قفل <نوع>` - قفل خاصية (البوتات، المعرفات، الدخول، الاضافه، التوجيه، الميديا، الانلاين، الفشار، الروابط، الفارسيه، الكل)
+◙ `.فتح <نوع>` - فتح خاصية
+◙ `.الحاله` - عرض حالة الحماية
+◙ `.البوتات` - كشف البوتات
+◙ `.البوتات طرد` - طرد جميع البوتات
+
+**📥 أوامر التحميل:**
+◙ `.تحميل صوتي <رابط>` - تحميل صوت من رابط
+◙ `.تحميل فيد <رابط>` - تحميل فيديو من رابط
+◙ `.صوتي <عنوان>` - تحميل صوت بالبحث
+
+**📋 أوامر المعلومات:**
+◙ `.ا` - عرض معلومات حسابك
+◙ `.المطور` - عرض معلومات المطور
+◙ `.ايدي` - عرض معرفك ومعلومات المحادثة
+
+**🔍 أوامر البحث:**
+◙ `.بحث <نص>` - البحث في جوجل
+◙ `.فيديو <اسم>` - البحث عن فيديو
+◙ `.اغنية <اسم>` - البحث عن أغنية
+
+**📖 أوامر أخرى:**
+◙ `.كت` - عرض حكمة عشوائية
+◙ `.تنصيب` - تنصيب البوت تلقائياً
+◙ `.الاوامر` - عرض هذه القائمة
+
+✧ سورس عبود ✧
+"""
+    await event.reply(help_text)
 
 # ========== معالج الوقت ==========
 @client.on(events.NewMessage(outgoing=True))
