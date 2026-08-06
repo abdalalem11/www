@@ -6,13 +6,24 @@ import re
 import json
 import sys
 import subprocess
+import time
+import csv
+import logging
+import html
 from datetime import datetime, timedelta
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
-from telethon.tl.types import MessageMediaPhoto, ChatBannedRights
-from telethon.errors import FloodWaitError, PhoneNumberInvalidError, PhoneCodeInvalidError, SessionPasswordNeededError
+from telethon.tl.types import MessageMediaPhoto, ChatBannedRights, ChannelParticipantsAdmins, ChannelParticipantCreator, ChannelParticipantAdmin, InputPeerUser, MessageEntityMentionName
+from telethon.errors import FloodWaitError, PhoneNumberInvalidError, PhoneCodeInvalidError, SessionPasswordNeededError, UserAlreadyParticipantError, UserPrivacyRestrictedError, UserNotMutualContactError
 from telethon.tl.functions.account import UpdateProfileRequest
-from telethon.tl.functions.channels import EditBannedRequest
+from telethon.tl.functions.channels import EditBannedRequest, InviteToChannelRequest, GetFullChannelRequest, GetParticipantsRequest
+from telethon.tl.functions.messages import GetFullChatRequest, GetHistoryRequest, ImportChatInviteRequest as Get
+from telethon.tl.functions.phone import CreateGroupCallRequest as startvc
+from telethon.tl.functions.phone import DiscardGroupCallRequest as stopvc
+from telethon.tl.functions.photos import GetUserPhotosRequest
+from telethon.tl.functions.users import GetFullUserRequest
+from telethon.utils import get_input_location
+from requests import get
 
 # ========== تحميل الإعدادات من ملف JSON ==========
 CONFIG_FILE = "config.json"
@@ -176,10 +187,8 @@ async def edit_delete(event, text, time=5):
     await msg.delete()
 
 # ========== دوال الحماية ==========
-BANNED_RIGHTS = ChatBannedRights(
-    until_date=None,
-    view_messages=True
-)
+BANNED_RIGHTS = ChatBannedRights(until_date=None, view_messages=True, send_messages=True, send_media=True, send_stickers=True, send_gifs=True, send_games=True, send_inline=True, embed_links=True)
+UNBAN_RIGHTS = ChatBannedRights(until_date=None, view_messages=False)
 
 def is_locked(chat_id, lock_type):
     locks = CONFIG.get("locks", {})
@@ -193,6 +202,86 @@ def update_lock(chat_id, lock_type, value):
         CONFIG["locks"][str(chat_id)] = {}
     CONFIG["locks"][str(chat_id)][lock_type] = value
     save_config()
+
+# ========== دوال الحصول على المستخدم ==========
+async def get_user_from_event(event):
+    """الحصول على المستخدم من الأمر أو الرد"""
+    if event.reply_to_msg_id:
+        previous_message = await event.get_reply_message()
+        user_object = await event.client.get_entity(previous_message.sender_id)
+    else:
+        user = event.pattern_match.group(1)
+        if user and user.isnumeric():
+            user = int(user)
+        if not user:
+            self_user = await event.client.get_me()
+            user = self_user.id
+        if event.message.entities:
+            probable_user_mention_entity = event.message.entities[0]
+            if isinstance(probable_user_mention_entity, MessageEntityMentionName):
+                user_id = probable_user_mention_entity.user_id
+                user_obj = await event.client.get_entity(user_id)
+                return user_obj
+        if isinstance(user, int) or (user and user.startswith("@")):
+            user_obj = await event.client.get_entity(user)
+            return user_obj
+        try:
+            user_object = await event.client.get_entity(user)
+        except (TypeError, ValueError) as err:
+            await event.edit(str(err))
+            return None
+    return user_object
+
+async def fetch_info(replied_user, event):
+    """جلب معلومات المستخدم"""
+    FullUser = (await event.client(GetFullUserRequest(replied_user.id))).full_user
+    replied_user_profile_photos = await event.client(
+        GetUserPhotosRequest(user_id=replied_user.id, offset=42, max_id=0, limit=80)
+    )
+    replied_user_profile_photos_count = "لايـوجـد بروفـايـل"
+    dc_id = "Can't get dc id"
+    try:
+        replied_user_profile_photos_count = replied_user_profile_photos.count
+        dc_id = replied_user.photo.dc_id
+    except AttributeError:
+        pass
+    
+    user_id = replied_user.id
+    first_name = replied_user.first_name
+    full_name = FullUser.private_forward_name
+    common_chat = FullUser.common_chats_count
+    username = replied_user.username
+    user_bio = FullUser.about
+    is_bot = replied_user.bot
+    restricted = replied_user.restricted
+    verified = replied_user.verified
+    
+    photo = await event.client.download_profile_photo(
+        user_id,
+        os.path.join("downloads", str(user_id) + ".jpg"),
+        download_big=True
+    )
+    
+    first_name = first_name.replace("\u2060", "") if first_name else "هذا المستخدم ليس له اسم أول"
+    full_name = full_name or first_name
+    username = f"@{username}" if username else "لايـوجـد معـرف"
+    user_bio = "لاتـوجـد نبـذة" if not user_bio else user_bio
+    
+    rotbat = "⌁ مـن مـطـوريـن الـسـورس ⌁" if user_id == 5502537272 else "⌁ العضـو ⌁"
+    if user_id == (await event.client.get_me()).id and user_id != 5502537272:
+        rotbat = "⌁ مـالـك الـحسـاب ⌁"
+    
+    caption = "✛━━━━━━━━━━━━━✛\n"
+    caption += f"<b> •❃╎الاسـم    ⇠ </b> {full_name}\n"
+    caption += f"<b> •❃╎المعـرف  ⇠ </b> {username}\n"
+    caption += f"<b> •❃╎الايـدي   ⇠ </b> <code>{user_id}</code>\n"
+    caption += f"<b> •❃╎الرتبـــه  ⇠ {rotbat} </b>\n"
+    caption += f"<b> •❃╎الصـور   ⇠ </b> {replied_user_profile_photos_count}\n"
+    caption += f"<b> •❃╎الحساب ⇠ </b> "
+    caption += f'<a href="tg://user?id={user_id}">{first_name}</a>'
+    caption += f"\n<b> •❃╎البايـو    ⇠ </b> {user_bio} \n"
+    caption += f"✛━━━━━━━━━━━━━✛"
+    return photo, caption
 
 # ========== Keep-Alive ==========
 async def keep_alive():
@@ -449,6 +538,445 @@ async def bots_command(event):
         else:
             await event.reply("✅ لا يوجد بوتات في هذه المجموعة")
 
+# ========== أوامر إضافية من ريبثون ==========
+@client.on(events.NewMessage(pattern=r'^\.تفليش$'))
+async def ban_all(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    zedevent = await edit_or_reply(event, "🔄 جاري تفليش المجموعة...")
+    admins = await client.get_participants(event.chat_id, filter=ChannelParticipantsAdmins)
+    admins_id = [i.id for i in admins]
+    total = 0
+    success = 0
+    
+    async for user in client.iter_participants(event.chat_id):
+        total += 1
+        if user.id not in admins_id:
+            try:
+                await client(EditBannedRequest(event.chat_id, user.id, BANNED_RIGHTS))
+                success += 1
+                await asyncio.sleep(0.5)
+            except:
+                pass
+    
+    await zedevent.edit(f"✅ تم تفليش {success} من {total} عضو")
+
+@client.on(events.NewMessage(pattern=r'^\.تصفير$'))
+async def kick_all(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    zedevent = await edit_or_reply(event, "🔄 جاري تصفير المجموعة...")
+    admins = await client.get_participants(event.chat_id, filter=ChannelParticipantsAdmins)
+    admins_id = [i.id for i in admins]
+    total = 0
+    success = 0
+    
+    async for user in client.iter_participants(event.chat_id):
+        total += 1
+        if user.id not in admins_id:
+            try:
+                await client.kick_participant(event.chat_id, user.id)
+                success += 1
+                await asyncio.sleep(0.5)
+            except:
+                pass
+    
+    await zedevent.edit(f"✅ تم تصفير {success} من {total} عضو")
+
+@client.on(events.NewMessage(pattern=r'^\.الاعضاء$'))
+async def get_users_list(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    zedevent = await edit_or_reply(event, "🔄 جاري جلب قائمة الأعضاء...")
+    mentions = "✧ **قائمة الأعضاء** ✧\n\n"
+    count = 0
+    
+    async for user in client.iter_participants(event.chat_id):
+        count += 1
+        if user.deleted:
+            mentions += f"• حساب محذوف (`{user.id}`)\n"
+        else:
+            mentions += f"• [{user.first_name}](tg://user?id={user.id})\n"
+        if count % 50 == 0:
+            await zedevent.edit(f"🔄 تم جلب {count} عضو...")
+    
+    await zedevent.edit(mentions)
+
+@client.on(events.NewMessage(pattern=r'^\.المشرفين$'))
+async def get_admins_list(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    zedevent = await edit_or_reply(event, "🔄 جاري جلب قائمة المشرفين...")
+    mentions = "✧ **قائمة المشرفين** ✧\n\n"
+    
+    async for user in client.iter_participants(event.chat_id, filter=ChannelParticipantsAdmins):
+        if isinstance(user.participant, ChannelParticipantCreator):
+            mentions += f"👑 المالك: [{user.first_name}](tg://user?id={user.id})\n"
+        else:
+            mentions += f"🛡️ مشرف: [{user.first_name}](tg://user?id={user.id})\n"
+    
+    await zedevent.edit(mentions)
+
+@client.on(events.NewMessage(pattern=r'^\.المعلومات$'))
+async def chat_info(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    zedevent = await edit_or_reply(event, "🔄 جاري جلب معلومات المجموعة...")
+    chat = await event.get_chat()
+    full_chat = await client(GetFullChannelRequest(event.chat_id))
+    
+    info_text = f"""
+✧ **معلومات المجموعة** ✧
+
+📛 الاسم: {chat.title}
+🆔 الايدي: `{event.chat_id}`
+👥 الأعضاء: {full_chat.full_chat.participants_count}
+🛡️ المشرفين: {full_chat.full_chat.admins_count if hasattr(full_chat.full_chat, 'admins_count') else 'غير معروف'}
+🚫 المحظورين: {full_chat.full_chat.kicked_count if hasattr(full_chat.full_chat, 'kicked_count') else 'غير معروف'}
+📝 الوصف: {full_chat.full_chat.about if full_chat.full_chat.about else 'لا يوجد'}
+
+✧ سورس عبود ✧
+"""
+    await zedevent.edit(info_text)
+
+@client.on(events.NewMessage(pattern=r'^\.مسح المحظورين$'))
+async def unban_all(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    zedevent = await edit_or_reply(event, "🔄 جاري مسح المحظورين...")
+    succ = 0
+    total = 0
+    
+    async for user in client.iter_participants(event.chat_id, filter=ChannelParticipantsKicked):
+        total += 1
+        try:
+            await client(EditBannedRequest(event.chat_id, user, UNBAN_RIGHTS))
+            succ += 1
+            await asyncio.sleep(0.5)
+        except:
+            pass
+    
+    await zedevent.edit(f"✅ تم مسح {succ} من {total} محظور")
+
+@client.on(events.NewMessage(pattern=r'^\.المحذوفين(?: (.+))?$'))
+async def deleted_accounts(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    action = event.pattern_match.group(1) if event.pattern_match.group(1) else "عرض"
+    zedevent = await edit_or_reply(event, "🔄 جاري البحث عن الحسابات المحذوفة...")
+    deleted = []
+    
+    async for user in client.iter_participants(event.chat_id):
+        if user.deleted:
+            deleted.append(user.id)
+    
+    if not deleted:
+        await zedevent.edit("✅ لا يوجد حسابات محذوفة في هذه المجموعة")
+        return
+    
+    if action == "تنظيف":
+        count = 0
+        for user_id in deleted:
+            try:
+                await client(EditBannedRequest(event.chat_id, user_id, BANNED_RIGHTS))
+                count += 1
+                await asyncio.sleep(0.5)
+            except:
+                pass
+        await zedevent.edit(f"✅ تم حظر {count} حساب محذوف")
+    else:
+        text = f"⚠️ **تم العثور على {len(deleted)} حساب محذوف:**\n\n"
+        for idx, user_id in enumerate(deleted[:20], 1):
+            text += f"{idx}. `{user_id}`\n"
+        if len(deleted) > 20:
+            text += f"\n... و {len(deleted) - 20} آخرين"
+        text += f"\n\nلحظرهم استخدم: `.المحذوفين تنظيف`"
+        await zedevent.edit(text)
+
+@client.on(events.NewMessage(pattern=r'^\.غادر$'))
+async def leave_group(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    await event.reply("🚶 جاري مغادرة المجموعة...")
+    await client.kick_participant(event.chat_id, "me")
+
+@client.on(events.NewMessage(pattern=r'^\.stat$'))
+async def statistics(event):
+    if not await is_owner(event):
+        return
+    
+    zedevent = await edit_or_reply(event, "🔄 جاري جلب الإحصائيات...")
+    start_time = time.time()
+    
+    private_chats = 0
+    bots = 0
+    groups = 0
+    channels = 0
+    admin_in_groups = 0
+    creator_in_groups = 0
+    admin_in_channels = 0
+    creator_in_channels = 0
+    
+    async for dialog in client.iter_dialogs():
+        entity = dialog.entity
+        if hasattr(entity, 'broadcast') and entity.broadcast:
+            channels += 1
+            if entity.creator or entity.admin_rights:
+                admin_in_channels += 1
+            if entity.creator:
+                creator_in_channels += 1
+        elif hasattr(entity, 'megagroup') and entity.megagroup:
+            groups += 1
+            if entity.creator or entity.admin_rights:
+                admin_in_groups += 1
+            if entity.creator:
+                creator_in_groups += 1
+        elif hasattr(entity, 'id') and not hasattr(entity, 'broadcast'):
+            private_chats += 1
+            if entity.bot:
+                bots += 1
+    
+    stop_time = time.time() - start_time
+    me = await client.get_me()
+    
+    text = f"""
+✧ **إحصائيات الحساب** ✧
+
+👤 الاسم: {me.first_name}
+🆔 الايدي: `{me.id}`
+
+💬 الخاص: {private_chats}
+   • اشخاص: {private_chats - bots}
+   • بوتات: {bots}
+
+👥 المجموعات: {groups}
+   • مالك: {creator_in_groups}
+   • مشرف: {admin_in_groups - creator_in_groups}
+
+📢 القنوات: {channels}
+   • مالك: {creator_in_channels}
+   • مشرف: {admin_in_channels - creator_in_channels}
+
+⏱️ الوقت المستغرق: {stop_time:.2f} ثانية
+
+✧ سورس عبود ✧
+"""
+    await zedevent.edit(text)
+
+@client.on(events.NewMessage(pattern=r'^\.تاك(?: (.+))?$'))
+async def tag_all(event):
+    if not await is_owner(event):
+        return
+    if not event.is_group:
+        await event.reply("❌ هذا الأمر فقط للمجموعات")
+        return
+    
+    msg = event.pattern_match.group(1) if event.pattern_match.group(1) else ""
+    if not msg and not event.reply_to_msg_id:
+        await event.reply("❌ اكتب نص مع الأمر أو رد على رسالة")
+        return
+    
+    zedevent = await edit_or_reply(event, "🔄 جاري تاك جميع الأعضاء...")
+    count = 0
+    text = ""
+    reply_to = event.reply_to_msg_id
+    
+    async for user in client.iter_participants(event.chat_id):
+        if not user.deleted:
+            count += 1
+            text += f"[{user.first_name}](tg://user?id={user.id}) "
+            if count % 5 == 0:
+                if reply_to:
+                    await client.send_message(event.chat_id, f"{text}\n\n{msg}", reply_to=reply_to)
+                else:
+                    await client.send_message(event.chat_id, f"{text}\n\n{msg}")
+                text = ""
+                await asyncio.sleep(2)
+    
+    await zedevent.delete()
+
+# ========== أوامر الايدي الجديدة ==========
+@client.on(events.NewMessage(pattern=r'^\.ايدي(?: |$)(.*)'))
+async def who(event):
+    """عرض معلومات الشخص"""
+    cat = await edit_or_reply(event, "⇆ جاري جلب المعلومات...")
+    
+    if not os.path.isdir("downloads"):
+        os.makedirs("downloads")
+    
+    replied_user = await get_user_from_event(event)
+    if not replied_user:
+        return await edit_or_reply(cat, "**- لم استطع العثور على الشخص**")
+    
+    try:
+        photo, caption = await fetch_info(replied_user, event)
+    except AttributeError:
+        return await edit_or_reply(cat, "**- لم استطع العثور على الشخص**")
+    
+    message_id_to_reply = event.message.reply_to_msg_id
+    if not message_id_to_reply:
+        message_id_to_reply = None
+    
+    try:
+        if photo:
+            await event.client.send_file(
+                event.chat_id,
+                photo,
+                caption=caption,
+                link_preview=False,
+                force_document=False,
+                reply_to=message_id_to_reply,
+                parse_mode="html",
+            )
+            if os.path.exists(photo):
+                os.remove(photo)
+            await cat.delete()
+        else:
+            await cat.edit(caption, parse_mode="html")
+    except Exception as e:
+        await cat.edit(caption, parse_mode="html")
+
+@client.on(events.NewMessage(pattern=r'^\.كشف(?:\s|$)([\s\S]*)'))
+async def userinfo(event):
+    """عرض معلومات المستخدم مع تفاصيل إضافية"""
+    replied_user = await get_user_from_event(event)
+    if not replied_user:
+        return
+    
+    catevent = await edit_or_reply(event, "᯽︙ جاري إحضار معلومات المستخدم ⚒️")
+    replied_user = await event.client(GetFullUserRequest(replied_user.id))
+    user_id = replied_user.users[0].id
+    first_name = html.escape(replied_user.users[0].first_name)
+    if first_name is not None:
+        first_name = first_name.replace("\u2060", "")
+    
+    common_chats = 1
+    try:
+        dc_id, location = get_input_location(replied_user.profile_photo)
+    except Exception:
+        dc_id = "Couldn't fetch DC ID!"
+    
+    # التحقق من Spamwatch
+    try:
+        from repthon import spamwatch
+        if spamwatch:
+            ban = spamwatch.get_ban(user_id)
+            if ban:
+                sw = f"**Spamwatch محظور:** `True` \n**السبب:** `{ban.reason}`"
+            else:
+                sw = f"**Spamwatch محظور:** `False`"
+        else:
+            sw = "**Spamwatch:** `غير متصل`"
+    except:
+        sw = "**Spamwatch:** `غير متصل`"
+    
+    # التحقق من CAS
+    try:
+        casurl = f"https://api.cas.chat/check?user_id={user_id}"
+        data = get(casurl).json()
+        if data and data.get("ok"):
+            cas = "**Antispam(CAS) محظور:** `True`"
+        else:
+            cas = "**Antispam(CAS) محظور:** `False`"
+    except:
+        cas = "**Antispam(CAS) محظور:** `تعذر الجلب`"
+    
+    caption = f"""**معلومات المستخدم [{first_name}](tg://user?id={user_id}):**
+   • الايدي: `{user_id}`
+   • المجموعات المشتركة: `{common_chats}`
+   • رقم قاعدة البيانات: `{dc_id}`
+   • حساب موثق: `{replied_user.users[0].restricted}`
+   • {sw}
+   • {cas}
+"""
+    await edit_or_reply(catevent, caption)
+
+@client.on(events.NewMessage(pattern=r'^\.id(?:\s|$)(.*)'))
+async def get_id_command(event):
+    """عرض الايدي فقط"""
+    input_str = event.pattern_match.group(1)
+    if input_str:
+        try:
+            p = await event.client.get_entity(input_str)
+            if hasattr(p, 'first_name'):
+                return await edit_or_reply(event, f"᯽︙ ايدي المستخدم `{input_str}` هو `{p.id}`")
+            elif hasattr(p, 'title'):
+                return await edit_or_reply(event, f"᯽︙ ايدي الدردشة/القناة `{p.title}` هو `{p.id}`")
+        except Exception as e:
+            return await edit_delete(event, f"`{str(e)}`", 5)
+    elif event.reply_to_msg_id:
+        r_msg = await event.get_reply_message()
+        if r_msg.media:
+            await edit_or_reply(
+                event,
+                f"᯽︙ ايدي الدردشه: `{str(event.chat_id)}` \n᯽︙ ايدي المستخدم: `{str(r_msg.sender_id)}`"
+            )
+        else:
+            await edit_or_reply(
+                event,
+                f"᯽︙ ايدي الدردشه: `{str(event.chat_id)}` \n᯽︙ ايدي المستخدم: `{str(r_msg.sender_id)}`"
+            )
+    else:
+        await edit_or_reply(event, f"᯽︙ الدردشة الحالية: `{str(event.chat_id)}`")
+
+@client.on(events.NewMessage(pattern=r'^\.ايديي$'))
+async def my_id_command(event):
+    if not await is_owner(event):
+        return
+    me = await client.get_me()
+    await event.reply(f"📋 ايديك: `{me.id}`")
+
+@client.on(events.NewMessage(pattern=r'^\.اسمي$'))
+async def my_name_command(event):
+    if not await is_owner(event):
+        return
+    me = await client.get_me()
+    await event.reply(f"📛 اسمك: {me.first_name} {me.last_name or ''}")
+
+@client.on(events.NewMessage(pattern=r'^\.رابط الحساب(?:\s|$)([\s\S]*)'))
+async def permalink(event):
+    """إنشاء رابط للمستخدم"""
+    user = await get_user_from_event(event)
+    if not user:
+        return
+    custom = event.pattern_match.group(1)
+    if custom:
+        return await edit_or_reply(event, f"[{custom}](tg://user?id={user.id})")
+    tag = user.first_name.replace("\u2060", "") if user.first_name else user.username
+    await edit_or_reply(event, f"⌔︙[{tag}](tg://user?id={user.id})")
+
 # ========== مرشح الرسائل للحماية ==========
 @client.on(events.NewMessage(incoming=True))
 async def protection_filter(event):
@@ -458,11 +986,9 @@ async def protection_filter(event):
     chat_id = event.chat_id
     sender = await event.get_sender()
     
-    # تجاهل رسائل المالك والمشرفين
     if sender.id == (await client.get_me()).id:
         return
     
-    # تجاهل المشرفين
     try:
         permissions = await client.get_permissions(chat_id, sender.id)
         if permissions.is_admin or permissions.is_creator:
@@ -472,7 +998,6 @@ async def protection_filter(event):
     
     text = event.raw_text
     
-    # فحص الفشار (كلمات بذيئة)
     if is_locked(chat_id, "badwords"):
         bad_words = ["خرا", "كسها", "كسمك", "كسختك", "عيري", "طيز", "سكس", "نيك", "زب", "اير", "خول", "عرص"]
         if any(word in text for word in bad_words):
@@ -482,7 +1007,6 @@ async def protection_filter(event):
             except:
                 pass
     
-    # فحص الروابط
     if is_locked(chat_id, "links"):
         if "http" in text or "www." in text:
             try:
@@ -490,95 +1014,6 @@ async def protection_filter(event):
                 await event.reply(f"⚠️ @{sender.username or sender.id} ممنوع إرسال الروابط!")
             except:
                 pass
-
-# ========== معالج التنصيب التلقائي ==========
-@client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
-async def install_bot(event):
-    global install_waiting, install_user_id, install_step
-    
-    if not await is_owner(event):
-        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
-        return
-    
-    try:
-        install_waiting = True
-        install_user_id = event.sender_id
-        install_step = "phone"
-        
-        await event.reply("""
-📥 **أمر التنصيب التلقائي**
-
-📌 أرسل الآن رقم هاتفك مع مفتاح الدولة
-📱 مثال: `+9665XXXXXXXX`
-
-✧ سورس عبود ✧
-""")
-    except Exception as e:
-        await event.reply(f"❌ خطأ: {str(e)}")
-        install_waiting = False
-
-@client.on(events.NewMessage(incoming=True))
-async def handle_install_input(event):
-    global install_waiting, install_user_id, install_phone, install_client, install_step, install_hash
-
-    if not install_waiting or event.sender_id != install_user_id or event.text.startswith('.'):
-        return
-
-    try:
-        if install_step == "phone":
-            phone = event.text.strip()
-            install_phone = phone
-            install_client = TelegramClient(StringSession(), API_ID, API_HASH)
-            await install_client.connect()
-            
-            try:
-                result = await install_client.send_code_request(phone)
-                install_hash = result.phone_code_hash
-                await event.reply(f"📱 تم استقبال الرقم: `{phone}`\n⏳ أرسل رمز التحقق الآن")
-                install_step = "code"
-            except Exception as e:
-                await event.reply(f"❌ خطأ: {str(e)}")
-                install_waiting = False
-
-        elif install_step == "code":
-            code = event.text.strip()
-            try:
-                await install_client.sign_in(phone=install_phone, code=code, phone_code_hash=install_hash)
-                me = await install_client.get_me()
-                new_session = install_client.session.save()
-                CONFIG["session_string"] = new_session
-                save_config()
-                await event.reply(f"✅ تم التنصيب بنجاح!\n📋 المعرف: `{me.id}`")
-                await install_client.disconnect()
-                await client.disconnect()
-                subprocess.Popen([sys.executable, __file__])
-                sys.exit(0)
-            except SessionPasswordNeededError:
-                await event.reply("🔐 مطلوب كلمة مرور الخطوتين، أرسلها الآن")
-                install_step = "password"
-            except Exception as e:
-                await event.reply(f"❌ خطأ: {str(e)}")
-                install_waiting = False
-
-        elif install_step == "password":
-            password = event.text.strip()
-            try:
-                await install_client.sign_in(password=password)
-                me = await install_client.get_me()
-                new_session = install_client.session.save()
-                CONFIG["session_string"] = new_session
-                save_config()
-                await event.reply(f"✅ تم التنصيب بنجاح!\n📋 المعرف: `{me.id}`")
-                await install_client.disconnect()
-                await client.disconnect()
-                subprocess.Popen([sys.executable, __file__])
-                sys.exit(0)
-            except Exception as e:
-                await event.reply(f"❌ كلمة المرور غير صحيحة: {str(e)}")
-
-    except Exception as e:
-        await event.reply(f"❌ خطأ عام: {str(e)}")
-        install_waiting = False
 
 # ========== أوامر الوقت ==========
 @client.on(events.NewMessage(pattern=r'^\.تفعيل الوقت$'))
@@ -684,52 +1119,6 @@ async def developer_info(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-@client.on(events.NewMessage(pattern=r'^\.ايدي$'))
-async def get_id(event):
-    try:
-        sender = await event.get_sender()
-        sender_id = sender.id
-        sender_name = sender.first_name or "لا يوجد"
-        sender_username = f"@{sender.username}" if sender.username else "لا يوجد يوزر"
-        chat_id = event.chat_id
-        now = get_saudi_time()
-        date_str = now.strftime("%Y-%m-%d %H:%M:%S")
-        text = f"""
-✧ معرف الايدي ✧
-
-👤 ايديك : {sender_id}
-📛 اسمك : {sender_name}
-🆔 يوزرك : {sender_username}
-💬 ايدي المحادثة : {chat_id}
-
-⏰ التاريخ : {date_str}
-📍 المنطقة : السعودية - الرياض
-
-✧ سورس عبود ✧"""
-        photos = await client.get_profile_photos(sender)
-        if photos:
-            await event.reply(text, file=photos[0])
-        else:
-            await event.reply(text)
-    except Exception as e:
-        await event.reply(f"❌ خطأ: {str(e)}")
-
-@client.on(events.NewMessage(pattern=r'^\.ايديي$'))
-async def my_id_command(event):
-    """عرض الايدي الخاص بك"""
-    if not await is_owner(event):
-        return
-    me = await client.get_me()
-    await event.reply(f"📋 ايديك: `{me.id}`")
-
-@client.on(events.NewMessage(pattern=r'^\.اسمي$'))
-async def my_name_command(event):
-    """عرض اسمك"""
-    if not await is_owner(event):
-        return
-    me = await client.get_me()
-    await event.reply(f"📛 اسمك: {me.first_name} {me.last_name or ''}")
-
 @client.on(events.NewMessage(pattern=r'^\.بحث (.+)'))
 async def search_command(event):
     if not await is_owner(event):
@@ -813,10 +1202,8 @@ async def quote_command(event):
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
 
-# ========== أوامر التسلية ==========
 @client.on(events.NewMessage(pattern=r'^\.نسبه الحب(?: (.+))?$'))
 async def love_percent(event):
-    """نسبة الحب بين شخصين"""
     if not await is_owner(event):
         return
     
@@ -844,10 +1231,8 @@ async def love_percent(event):
 ✧ سورس عبود ✧
 """)
 
-# ========== أمر عرض الأوامر ==========
 @client.on(events.NewMessage(pattern=r'^\.الاوامر$'))
 async def show_commands(event):
-    """عرض جميع الأوامر المتاحة"""
     if not await is_owner(event):
         return
     
@@ -861,6 +1246,18 @@ async def show_commands(event):
 ◙ `.البوتات` - كشف البوتات
 ◙ `.البوتات طرد` - طرد جميع البوتات
 
+**👥 أوامر المجموعة:**
+◙ `.تفليش` - حظر جميع الأعضاء
+◙ `.تصفير` - طرد جميع الأعضاء
+◙ `.الاعضاء` - عرض قائمة الأعضاء
+◙ `.المشرفين` - عرض قائمة المشرفين
+◙ `.المعلومات` - معلومات المجموعة
+◙ `.المحذوفين` - عرض الحسابات المحذوفة
+◙ `.المحذوفين تنظيف` - حظر الحسابات المحذوفة
+◙ `.مسح المحظورين` - مسح جميع المحظورين
+◙ `.غادر` - مغادرة المجموعة
+◙ `.تاك <نص>` - تاك جميع الأعضاء
+
 **📥 أوامر التحميل:**
 ◙ `.تحميل صوتي <رابط>` - تحميل صوت
 ◙ `.تحميل فيد <رابط>` - تحميل فيديو
@@ -868,10 +1265,13 @@ async def show_commands(event):
 
 **📋 أوامر المعلومات:**
 ◙ `.ا` - معلومات حسابك
-◙ `.المطور` - معلومات المطور
-◙ `.ايدي` - معرفك ومعلومات المحادثة
+◙ `.ايدي` - معلومات الشخص
 ◙ `.ايديي` - عرض ايديك فقط
 ◙ `.اسمي` - عرض اسمك
+◙ `.كشف` - معلومات مفصلة عن الشخص
+◙ `.id` - عرض الايدي فقط
+◙ `.stat` - إحصائيات الحساب
+◙ `.رابط الحساب` - رابط حساب الشخص
 
 **🔍 أوامر البحث:**
 ◙ `.بحث <نص>` - البحث في جوجل
@@ -889,7 +1289,6 @@ async def show_commands(event):
 **📖 أوامر أخرى:**
 ◙ `.تنصيب` - تنصيب البوت تلقائياً
 ◙ `.مساعده` - عرض المساعدة
-◙ `.الاوامر` - عرض هذه القائمة
 
 ✧ **سورس عبود** ✧
 """
@@ -897,7 +1296,6 @@ async def show_commands(event):
 
 @client.on(events.NewMessage(pattern=r'^\.مساعده$'))
 async def help_command(event):
-    """عرض قائمة المساعدة التفصيلية"""
     if not await is_owner(event):
         return
     
@@ -911,6 +1309,18 @@ async def help_command(event):
 ◙ `.البوتات` - كشف البوتات
 ◙ `.البوتات طرد` - طرد جميع البوتات
 
+**👥 أوامر المجموعة:**
+◙ `.تفليش` - حظر جميع الأعضاء (ما عدا المشرفين)
+◙ `.تصفير` - طرد جميع الأعضاء (ما عدا المشرفين)
+◙ `.الاعضاء` - عرض قائمة جميع الأعضاء
+◙ `.المشرفين` - عرض قائمة المشرفين
+◙ `.المعلومات` - عرض معلومات المجموعة
+◙ `.المحذوفين` - عرض الحسابات المحذوفة
+◙ `.المحذوفين تنظيف` - حظر الحسابات المحذوفة
+◙ `.مسح المحظورين` - مسح جميع المحظورين
+◙ `.غادر` - مغادرة المجموعة
+◙ `.تاك <نص>` - تاك جميع الأعضاء مع نص
+
 **📥 أوامر التحميل:**
 ◙ `.تحميل صوتي <رابط>` - تحميل صوت من رابط
 ◙ `.تحميل فيد <رابط>` - تحميل فيديو من رابط
@@ -918,8 +1328,13 @@ async def help_command(event):
 
 **📋 أوامر المعلومات:**
 ◙ `.ا` - عرض معلومات حسابك
-◙ `.المطور` - عرض معلومات المطور
-◙ `.ايدي` - عرض معرفك ومعلومات المحادثة
+◙ `.ايدي` - عرض معلومات الشخص مع الصورة
+◙ `.ايديي` - عرض ايديك فقط
+◙ `.اسمي` - عرض اسمك
+◙ `.كشف` - معلومات مفصلة عن الشخص
+◙ `.id` - عرض الايدي فقط
+◙ `.stat` - عرض إحصائيات الحساب
+◙ `.رابط الحساب` - إنشاء رابط لحساب الشخص
 
 **🔍 أوامر البحث:**
 ◙ `.بحث <نص>` - البحث في جوجل
@@ -929,7 +1344,6 @@ async def help_command(event):
 **📖 أوامر أخرى:**
 ◙ `.كت` - عرض حكمة عشوائية
 ◙ `.تنصيب` - تنصيب البوت تلقائياً
-◙ `.الاوامر` - عرض هذه القائمة
 
 ✧ سورس عبود ✧
 """
