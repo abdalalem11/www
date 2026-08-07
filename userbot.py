@@ -719,6 +719,12 @@ async def show_commands(event):
 ◙ `.تنصيب` - تنصيب البوت تلقائياً
 ◙ `.مساعده` - عرض المساعدة
 
+**🔄 أوامر التكرار:**
+◙ `.سبام <عدد> <رسالة>` - تكرار إرسال رسالة (الحد الأقصى 99)
+◙ `.مكرر <وقت> <عدد> <رسالة>` - تكرار إرسال رسالة بفاصل زمني
+◙ `.فصخ <جملة>` - تفصيخ الجملة حرفاً حرفاً
+◙ `.ايقاف مكرر` - إيقاف أمر المكرر
+
 ✧ **سورس عبود** ✧
 """
     await event.reply(commands_text)
@@ -753,6 +759,12 @@ async def help_command(event):
 ◙ `.حظر` - حظر شخص
 ◙ `.كتم` - كتم شخص
 ◙ `.طرد` - طرد شخص
+
+**🔄 التكرار:**
+◙ `.سبام <عدد> <رسالة>` - تكرار إرسال رسالة
+◙ `.مكرر <وقت> <عدد> <رسالة>` - تكرار إرسال رسالة بفاصل زمني
+◙ `.فصخ <جملة>` - تفصيخ الجملة
+◙ `.ايقاف مكرر` - إيقاف أمر المكرر
 
 ✧ **سورس عبود** ✧
 """
@@ -3027,6 +3039,102 @@ async def add_time_to_message(event):
         await update_name(new_name, last_name)
     except Exception as e:
         print(f"❌ خطأ في تحديث الاسم: {e}")
+
+# ================================================================
+#                   أوامر التكرار (Spam Commands)
+# ================================================================
+
+# المتغيرات العامة للتكرار
+spam_running = {}
+
+@client.on(events.NewMessage(pattern=r'^\.سبام (\d+) ([\s\S]+)$'))
+async def spam_command(event):
+    """أمر السبام لتكرار إرسال رسالة عدد محدد من المرات"""
+    if not await is_owner(event):
+        return
+    
+    try:
+        count = int(event.pattern_match.group(1))
+        if count > 99:
+            await event.reply("⚠️ لا يمكن السبام أكثر من 99 رسالة")
+            return
+        
+        message = event.pattern_match.group(2)
+        await event.delete()
+        
+        for i in range(count):
+            await event.reply(message)
+            await asyncio.sleep(0.5)
+            
+    except Exception as e:
+        await event.reply(f"❌ خطأ في السبام: {str(e)}")
+
+@client.on(events.NewMessage(pattern=r'^\.مكرر (\d+\.?\d*) (\d+) ([\s\S]+)$'))
+async def spam_with_delay(event):
+    """أمر المكرر مع وقت بين الإرسالات"""
+    if not await is_owner(event):
+        return
+    
+    try:
+        delay = float(event.pattern_match.group(1))
+        count = int(event.pattern_match.group(2))
+        message = event.pattern_match.group(3)
+        chat_id = event.chat_id
+        
+        await event.delete()
+        
+        spam_running[chat_id] = True
+        
+        for i in range(count):
+            if not spam_running.get(chat_id, False):
+                break
+            await event.reply(message)
+            await asyncio.sleep(delay)
+        
+        if chat_id in spam_running:
+            del spam_running[chat_id]
+            
+    except Exception as e:
+        await event.reply(f"❌ خطأ في المكرر: {str(e)}")
+        if chat_id in spam_running:
+            del spam_running[chat_id]
+
+@client.on(events.NewMessage(pattern=r'^\.ايقاف مكرر$'))
+async def stop_spam(event):
+    """إيقاف أمر المكرر"""
+    if not await is_owner(event):
+        return
+    
+    chat_id = event.chat_id
+    if spam_running.get(chat_id, False):
+        spam_running[chat_id] = False
+        await event.reply("✅ تم إيقاف المكرر بنجاح")
+    else:
+        await event.reply("❌ لا يوجد مكرر يعمل حالياً")
+
+@client.on(events.NewMessage(pattern=r'^\.فصخ ([\s\S]+)$'))
+async def typewriter(event):
+    """أمر تفصيخ الجملة حرفاً حرفاً"""
+    if not await is_owner(event):
+        return
+    
+    message = event.pattern_match.group(1)
+    typing_symbol = "|"
+    old_text = ""
+    
+    msg = await event.reply(typing_symbol)
+    await asyncio.sleep(0.2)
+    
+    try:
+        for character in message:
+            old_text = old_text + character
+            typing_text = old_text + typing_symbol
+            await msg.edit(typing_text)
+            await asyncio.sleep(0.1)
+            await msg.edit(old_text)
+            await asyncio.sleep(0.1)
+    except Exception as e:
+        await msg.edit(f"❌ خطأ: {str(e)}")
 
 # ================================================================
 #                   خادم الويب (Web Server)
