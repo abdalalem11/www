@@ -1115,7 +1115,7 @@ class LOG_CHATS:
 
 LOG_CHATS_ = LOG_CHATS()
 
-@jmthon.ar_cmd(incoming=True, func=lambda e: e.is_private, edited=False)
+@jmthon.ar_cmd(pattern="", func=lambda e: e.is_private and not e.out, allow_edited_updates=False)
 async def monitor_pms(event):
     if Config.PM_LOGGER_GROUP_ID == -100:
         return
