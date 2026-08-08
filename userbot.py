@@ -513,7 +513,7 @@ factory_step = "waiting"
 digitalpic_running = False
 autoname_running = False
 autobio_running = False
-repself = True  # تفعيل حفظ الذاتية التلقائي
+repself = True
 
 # ========== إعدادات التحميل ==========
 ytd = {
@@ -568,10 +568,9 @@ async def edit_delete(event, text, time=5):
     await msg.delete()
 
 async def get_user_from_event(event):
-    """جلب المستخدم من الحدث - نسخة معدلة"""
+    """جلب المستخدم من الحدث"""
     user = None
     try:
-        # 1. محاولة جلب من الرد
         if event.reply_to_msg_id:
             try:
                 previous_message = await event.get_reply_message()
@@ -581,7 +580,6 @@ async def get_user_from_event(event):
             except:
                 pass
         
-        # 2. محاولة جلب من النص
         if hasattr(event, 'pattern_match') and event.pattern_match:
             input_str = event.pattern_match.group(1)
             if input_str:
@@ -595,7 +593,6 @@ async def get_user_from_event(event):
                 except:
                     pass
         
-        # 3. جلب المرسل نفسه
         if event.sender_id:
             user = await event.client.get_entity(event.sender_id)
             return user, None
@@ -857,7 +854,7 @@ async def amireallyalive(event):
         await edit_or_reply(event, caption)
 
 # =====================================================================
-#                        أَمْرُ الْأَوَامِرِ (قائمة الأوامر الرئيسية)
+#                        أَمْرُ الْأَوَامِرِ
 # =====================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.الاوامر$'))
@@ -1009,48 +1006,8 @@ async def show_commands(event):
 """
     await event.reply(commands_text)
 
-@client.on(events.NewMessage(pattern=r'^\.مساعده$'))
-async def help_command(event):
-    if not await is_owner(event):
-        return
-    help_text = """
-✧ **قائمة المساعدة السريعة** ✧
-
-**📥 التنصيب:**
-◙ `.تنصيب` - تنصيب البوت بالرقم والرمز
-◙ `.تنصيب جلسة` - تنصيب البوت بالجلسة المستخرجة
-◙ `.تنصيب مصنع` - تنصيب حساب جديد كنسخة من السورس
-
-**📖 الأوامر الرئيسية:**
-◙ `.الاوامر` - عرض جميع الأوامر
-◙ `.ا` - معلومات حسابك
-◙ `.تفعيل الوقت` - تفعيل عرض الوقت
-◙ `.كت` - حكمة عشوائية
-◙ `.بحث` - بحث في جوجل
-
-**🛡️ الحماية:**
-◙ `.الحاله` - عرض حالة الحماية
-◙ `.قفل` - قفل خاصية
-◙ `.فتح` - فتح خاصية
-
-**👑 المشرفين:**
-◙ `.رفع مشرف` - رفع مشرف
-◙ `.حظر` - حظر شخص
-◙ `.كتم` - كتم شخص
-◙ `.طرد` - طرد شخص
-
-**🔄 التكرار:**
-◙ `.سبام <عدد> <رسالة>` - تكرار إرسال رسالة
-◙ `.مكرر <وقت> <عدد> <رسالة>` - تكرار إرسال رسالة بفاصل زمني
-◙ `.فصخ <جملة>` - تفصيخ الجملة
-◙ `.ايقاف مكرر` - إيقاف أمر المكرر
-
-✧ **سورس عبود** ✧
-"""
-    await event.reply(help_text)
-
 # =====================================================================
-#                        أَوَامِرُ التَّنْصِيبِ (معدلة)
+#                        أَوَامِرُ التَّنْصِيبِ
 # =====================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.تنصيب جلسة$'))
@@ -1058,12 +1015,12 @@ async def install_session_command(event):
     if not await is_owner(event):
         return
     await event.reply("""
-📥 **أمر التنصيب بالجلسة**
+📥 أمر التنصيب بالجلسة
 
 📌 أرسل جلسة تيليجرام المستخرجة في رسالة جديدة
 ⚠️ تأكد من نسخها كاملة
 
-✧ **سورس عبود** ✧
+✧ سورس عبود ✧
 """)
     global waiting_for_session, session_user_id
     waiting_for_session = True
@@ -1094,13 +1051,13 @@ async def handle_session_input(event):
     save_config()
     os.environ["SESSION_STRING"] = session_str
     await event.reply(f"""
-✅ **تم التنصيب بنجاح!**
+✅ تم التنصيب بنجاح!
 
 👤 الحساب: {me.first_name}
 🆔 الايدي: `{me.id}`
 🔄 جاري إعادة التشغيل...
 
-✧ **سورس عبود** ✧
+✧ سورس عبود ✧
 """)
     waiting_for_session = False
     try:
@@ -1126,17 +1083,17 @@ async def install_bot(event):
     install_phone = None
     install_hash = None
     await event.reply("""
-📥 **أمر التنصيب التلقائي**
+📥 أمر التنصيب التلقائي
 
-📌 **الخطوات:**
+📌 الخطوات:
 1️⃣ أرسل رقم هاتفك مع مفتاح الدولة (مثال: +9665XXXXXXXX)
 2️⃣ انتظر رمز التحقق من تيليجرام
 3️⃣ أرسل الرمز المكون من 5 أرقام هنا
 4️⃣ إذا كان الحساب مفعل بخطوتين، أرسل كلمة المرور
 
-💡 **بديل:** استخدم `.تنصيب جلسة` إذا كنت تملك جلسة مستخرجة
+💡 بديل: استخدم .تنصيب جلسة إذا كنت تملك جلسة مستخرجة
 
-✧ **سورس عبود** ✧
+✧ سورس عبود ✧
 """)
 
 @client.on(events.NewMessage())
@@ -1164,7 +1121,7 @@ async def handle_install_input(event):
 ⏳ جاري إرسال رمز التحقق...
 📩 أرسل الرمز الذي وصل إلى تيليجرام
 
-✧ **سورس عبود** ✧
+✧ سورس عبود ✧
 """)
                 install_step = "code"
             except PhoneNumberInvalidError:
@@ -1198,7 +1155,7 @@ async def handle_install_input(event):
                 save_config()
                 os.environ["SESSION_STRING"] = new_session
                 await event.reply(f"""
-✅ **تم التنصيب بنجاح!**
+✅ تم التنصيب بنجاح!
 
 📋 المعرف: `{me_new.id}`
 📛 الاسم: {me_new.first_name}
@@ -1206,7 +1163,7 @@ async def handle_install_input(event):
 
 🔄 جاري إعادة التشغيل...
 
-✧ **سورس عبود** ✧
+✧ سورس عبود ✧
 """)
                 await install_client.disconnect()
                 install_client = None
@@ -1215,11 +1172,11 @@ async def handle_install_input(event):
                 sys.exit(0)
             except SessionPasswordNeededError:
                 await event.reply("""
-🔐 **مطلوب كلمة مرور الخطوتين!**
+🔐 مطلوب كلمة مرور الخطوتين!
 
 📌 أرسل الآن كلمة المرور الخاصة بحسابك
 
-✧ **سورس عبود** ✧
+✧ سورس عبود ✧
 """)
                 install_step = "password"
             except PhoneCodeInvalidError:
@@ -1227,7 +1184,7 @@ async def handle_install_input(event):
             except FloodWaitError as e:
                 await event.reply(f"⏳ انتظر {e.seconds} ثانية قبل المحاولة مرة أخرى")
             except Exception as e:
-                await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة بـ `.تنصيب`")
+                await event.reply(f"❌ خطأ: {str(e)}\n\n📌 أعد المحاولة بـ .تنصيب")
                 install_waiting = False
                 install_step = "phone"
                 if install_client:
@@ -1243,7 +1200,7 @@ async def handle_install_input(event):
                 save_config()
                 os.environ["SESSION_STRING"] = new_session
                 await event.reply(f"""
-✅ **تم التنصيب بنجاح!**
+✅ تم التنصيب بنجاح!
 
 📋 المعرف: `{me_new.id}`
 📛 الاسم: {me_new.first_name}
@@ -1251,7 +1208,7 @@ async def handle_install_input(event):
 
 🔄 جاري إعادة التشغيل...
 
-✧ **سورس عبود** ✧
+✧ سورس عبود ✧
 """)
                 await install_client.disconnect()
                 install_client = None
@@ -1262,113 +1219,12 @@ async def handle_install_input(event):
                 await event.reply(f"❌ كلمة المرور غير صحيحة!\nالخطأ: {str(e)}")
                 install_step = "password"
     except Exception as e:
-        await event.reply(f"❌ خطأ عام: {str(e)}\n\n📌 أعد المحاولة بـ `.تنصيب`")
+        await event.reply(f"❌ خطأ عام: {str(e)}\n\n📌 أعد المحاولة بـ .تنصيب")
         install_waiting = False
         install_step = "phone"
         if install_client:
             await install_client.disconnect()
             install_client = None
-
-@client.on(events.NewMessage(pattern=r'^\.تنصيب مصنع$'))
-async def factory_install_command(event):
-    if not await is_owner(event):
-        return
-    global factory_active, factory_user_id, factory_step
-    factory_active = True
-    factory_user_id = event.sender_id
-    factory_step = "waiting"
-    await event.reply("""
-🏭 **مصنع تنصيب الحسابات**
-
-📥 أرسل جلسة تليثون مستخرجة جاهزة
-⚠️ تأكد من نسخها كاملة
-
-✧ **سورس عبود** ✧
-""")
-
-@client.on(events.NewMessage())
-async def factory_session_handler(event):
-    global factory_active, factory_user_id, factory_step
-    if not factory_active:
-        return
-    if event.sender_id != factory_user_id:
-        return
-    if event.text.startswith('.'):
-        return
-    if factory_step != "waiting":
-        return
-    session_str = event.text.strip()
-    await event.reply("📥 **جاري استقبال الجلسة...**")
-    if len(session_str) < 20:
-        await event.reply("❌ الجلسة غير صالحة! تأكد من نسخها كاملة")
-        factory_active = False
-        return
-    factory_step = "processing"
-    try:
-        await event.reply("🔄 **جاري التحقق من صحة الجلسة...**")
-        temp_client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
-        await temp_client.connect()
-        me = await temp_client.get_me()
-        await temp_client.disconnect()
-        await event.reply(f"✅ **الجلسة صالحة!**\n👤 الحساب: {me.first_name}\n🆔 الايدي: `{me.id}`")
-    except Exception as e:
-        await event.reply(f"❌ **الجلسة غير صالحة:**\n{str(e)}")
-        factory_active = False
-        return
-    account_id = me.id
-    source_file = f"sorcer_{account_id}.py"
-    runner_file = f"run_{account_id}.py"
-    try:
-        await event.reply("📝 **جاري إنشاء ملفات الحساب الجديد...**")
-        with open(__file__, 'r', encoding='utf-8') as f:
-            source_code = f.read()
-        modified_code = source_code.replace(
-            'SESSION = os.environ.get("SESSION_STRING", CONFIG.get("session_string", ""))',
-            f'SESSION = "{session_str}"'
-        )
-        with open(source_file, 'w', encoding='utf-8') as f:
-            f.write(modified_code)
-        runner_script = f'''# -*- coding: utf-8 -*-
-import os
-import sys
-import subprocess
-
-if __name__ == "__main__":
-    print("🚀 جاري تشغيل الحساب الجديد...")
-    try:
-        subprocess.Popen([sys.executable, "{source_file}"])
-        print("✅ تم تشغيل الحساب بنجاح!")
-    except Exception as e:
-        print(f"❌ خطأ في التشغيل: {{e}}")
-'''
-        with open(runner_file, 'w', encoding='utf-8') as f:
-            f.write(runner_script)
-    except Exception as e:
-        await event.reply(f"❌ **خطأ في إنشاء الملفات:**\n{str(e)}")
-        factory_active = False
-        return
-    await event.reply(f"""
-✅ **تم تنصيب الحساب بنجاح!**
-
-━━━━━━━━━━━━━━━━
-👤 **الحساب:** {me.first_name}
-🆔 **الايدي:** `{account_id}`
-📁 **ملف السورس:** `{source_file}`
-🚀 **ملف التشغيل:** `{runner_file}`
-━━━━━━━━━━━━━━━━
-
-🔄 **لتشغيل الحساب استخدم:**
-`python {runner_file}`
-
-✧ **سورس عبود** ✧
-""")
-    try:
-        subprocess.Popen([sys.executable, runner_file])
-        await event.reply("✅ **تم تشغيل الحساب الجديد بنجاح!**")
-    except Exception as e:
-        await event.reply(f"⚠️ **تم التنصيب لكن فشل التشغيل التلقائي:**\n{str(e)}")
-    factory_active = False
-    factory_step = "done"
 
 # =====================================================================
 #                        أَمْرُ إِعَادَةِ التَّشْغِيلِ
@@ -1378,7 +1234,7 @@ if __name__ == "__main__":
 async def restart_bot(event):
     if not await is_owner(event):
         return
-    await event.reply("🔄 **جاري إعادة تشغيل البوت...**")
+    await event.reply("🔄 جاري إعادة تشغيل البوت...")
     try:
         subprocess.Popen([sys.executable, __file__])
         sys.exit(0)
@@ -1386,24 +1242,22 @@ async def restart_bot(event):
         await event.reply(f"❌ خطأ في إعادة التشغيل: {str(e)}")
 
 # =====================================================================
-#                        أَمْرُ التَّحْدِيثِ مِنْ GitHub
+#                        أَمْرُ التَّحْدِيثِ
 # =====================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.تحديث$'))
 async def update_source(event):
     if not await is_owner(event):
         return
-    zedevent = await edit_or_reply(event, "🔄 **جاري التحقق من التحديثات...**")
+    zedevent = await edit_or_reply(event, "🔄 جاري التحقق من التحديثات...")
     try:
         import subprocess
         import requests
         
-        # التحقق من وجود git
         result = subprocess.run(["git", "--version"], capture_output=True, text=True)
         if result.returncode != 0:
-            return await zedevent.edit("❌ **Git غير مثبت على السيرفر!**")
+            return await zedevent.edit("❌ Git غير مثبت على السيرفر!")
         
-        # جلب آخر commit من GitHub
         repo_url = "https://api.github.com/repos/SSSTlF/SORCER/commits/main"
         try:
             response = requests.get(repo_url, timeout=10)
@@ -1412,35 +1266,31 @@ async def update_source(event):
                 latest_commit = data.get("sha", "")[:7]
                 latest_message = data.get("commit", {}).get("message", "تحديث جديد")
                 latest_author = data.get("commit", {}).get("author", {}).get("name", "المطور")
-                latest_date = data.get("commit", {}).get("author", {}).get("date", "")
             else:
                 latest_commit = "غير معروف"
                 latest_message = "تعذر جلب التحديثات"
                 latest_author = "غير معروف"
-                latest_date = ""
         except:
             latest_commit = "غير معروف"
             latest_message = "تعذر جلب التحديثات"
             latest_author = "غير معروف"
-            latest_date = ""
         
-        # جلب commit الحالي
         current_commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
         
         if current_commit == latest_commit:
             await zedevent.edit(f"""
-✅ **السورس محدث بالفعل!**
+✅ السورس محدث بالفعل!
 
 📌 الإصدار الحالي: `{current_commit}`
 👤 آخر تحديث: {latest_author}
 📝 الرسالة: {latest_message}
 
-✧ **سورس عبود** ✧
+✧ سورس عبود ✧
 """)
             return
         
         await zedevent.edit(f"""
-🔄 **جاري تحديث السورس...**
+🔄 جاري تحديث السورس...
 
 📌 الإصدار الحالي: `{current_commit}`
 📌 الإصدار الجديد: `{latest_commit}`
@@ -1450,12 +1300,11 @@ async def update_source(event):
 ⏳ جاري سحب التحديثات...
 """)
         
-        # سحب التحديثات
         pull_result = subprocess.run(["git", "pull"], capture_output=True, text=True)
         
         if pull_result.returncode != 0:
             return await zedevent.edit(f"""
-❌ **فشل التحديث!**
+❌ فشل التحديث!
 
 📌 الخطأ:
 `{pull_result.stderr}`
@@ -1464,47 +1313,21 @@ async def update_source(event):
 """)
         
         await zedevent.edit(f"""
-✅ **تم تحديث السورس بنجاح!**
+✅ تم تحديث السورس بنجاح!
 
 📌 الإصدار الجديد: `{latest_commit}`
 📝 التحديث: {latest_message}
 👤 المطور: {latest_author}
 
 🔄 جاري إعادة تشغيل البوت...
-✧ **سورس عبود** ✧
+✧ سورس عبود ✧
 """)
         
-        # إعادة تشغيل البوت
         subprocess.Popen([sys.executable, __file__])
         sys.exit(0)
         
     except Exception as e:
-        await zedevent.edit(f"❌ **خطأ في التحديث:**\n`{str(e)}`")
-
-@client.on(events.NewMessage(pattern=r'^\.تحديث قسري$'))
-async def force_update(event):
-    if not await is_owner(event):
-        return
-    zedevent = await edit_or_reply(event, "🔄 **جاري التحديث القسري...**")
-    try:
-        import subprocess
-        
-        # إعادة تعيين التغييرات المحلية
-        subprocess.run(["git", "reset", "--hard"], capture_output=True, text=True)
-        subprocess.run(["git", "clean", "-fd"], capture_output=True, text=True)
-        
-        # سحب التحديثات
-        pull_result = subprocess.run(["git", "pull", "--force"], capture_output=True, text=True)
-        
-        if pull_result.returncode != 0:
-            return await zedevent.edit(f"❌ **فشل التحديث القسري!**\n`{pull_result.stderr}`")
-        
-        await zedevent.edit("✅ **تم التحديث القسري بنجاح!**\n🔄 جاري إعادة التشغيل...")
-        subprocess.Popen([sys.executable, __file__])
-        sys.exit(0)
-        
-    except Exception as e:
-        await zedevent.edit(f"❌ **خطأ:** `{str(e)}`")
+        await zedevent.edit(f"❌ خطأ في التحديث:\n`{str(e)}`")
 
 @client.on(events.NewMessage(pattern=r'^\.اخر تحديث$'))
 async def last_update(event):
@@ -1514,7 +1337,6 @@ async def last_update(event):
         import subprocess
         import requests
         
-        # جلب آخر commit من GitHub
         repo_url = "https://api.github.com/repos/SSSTlF/SORCER/commits/main"
         try:
             response = requests.get(repo_url, timeout=10)
@@ -1523,32 +1345,25 @@ async def last_update(event):
                 latest_commit = data.get("sha", "")[:7]
                 latest_message = data.get("commit", {}).get("message", "تحديث جديد")
                 latest_author = data.get("commit", {}).get("author", {}).get("name", "المطور")
-                latest_date = data.get("commit", {}).get("author", {}).get("date", "")
             else:
                 latest_commit = "غير معروف"
                 latest_message = "تعذر جلب التحديثات"
                 latest_author = "غير معروف"
-                latest_date = ""
         except:
             latest_commit = "غير معروف"
             latest_message = "تعذر جلب التحديثات"
             latest_author = "غير معروف"
-            latest_date = ""
         
-        # جلب commit الحالي
         current_commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
-        
-        # جلب تاريخ التغييرات
         log_result = subprocess.run(["git", "log", "--oneline", "-5"], capture_output=True, text=True).stdout.strip()
         
         await event.reply(f"""
-📋 **معلومات التحديثات**
+📋 معلومات التحديثات
 
 📌 الإصدار الحالي: `{current_commit}`
 📌 آخر إصدار: `{latest_commit}`
 
 👤 المطور: {latest_author}
 📝 آخر تحديث: {latest_message}
-📅 التاريخ: {latest_date}
 
-📖 **آخر 5 تغييرات:**
+📖 آخر 5 تغييرات:
