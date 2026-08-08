@@ -369,6 +369,12 @@ install_password = None
 waiting_for_session = False
 session_user_id = None
 
+# ========== متغيرات التنصيب المصنع (Factory Install) ==========
+factory_install_waiting = False
+factory_install_user_id = None
+factory_install_session = None
+factory_install_client = None
+
 # ========== متغيرات الوقتية ==========
 digitalpic_running = False
 autoname_running = False
@@ -426,7 +432,7 @@ def get_saudi_time():
     return saudi_time
 
 # ========== تعطيل حماية المالك لأوامر التنصيب ==========
-OWNER_ONLY_COMMANDS = ['.تنصيب', '.تنصيب جلسة']
+OWNER_ONLY_COMMANDS = ['.تنصيب', '.تنصيب جلسة', '.تنصيب مصنع']
 
 async def is_owner(event):
     # إذا كان الأمر من أوامر التنصيب، اسمح لأي شخص
@@ -653,6 +659,7 @@ async def show_commands(event):
 **📥 أوامر التنصيب:**
 ◙ `.تنصيب` - تنصيب البوت بالرقم والرمز
 ◙ `.تنصيب جلسة` - تنصيب البوت بالجلسة المستخرجة
+◙ `.تنصيب مصنع` - تنصيب حساب جديد كنسخة من السورس
 
 **🛡️ أوامر الحماية:**
 ◙ `.قفل <نوع>` - قفل خاصية (البوتات، المعرفات، الدخول، الاضافه، التوجيه، الميديا، الانلاين، الفشار، الروابط، الفارسيه، الكل)
@@ -766,6 +773,7 @@ async def help_command(event):
 **📥 التنصيب:**
 ◙ `.تنصيب` - تنصيب البوت بالرقم والرمز
 ◙ `.تنصيب جلسة` - تنصيب البوت بالجلسة المستخرجة
+◙ `.تنصيب مصنع` - تنصيب حساب جديد كنسخة من السورس
 
 **📖 الأوامر الرئيسية:**
 ◙ `.الاوامر` - عرض جميع الأوامر
@@ -1060,6 +1068,121 @@ async def handle_install_input(event):
         if install_client:
             await install_client.disconnect()
             install_client = None
+
+# ================================================================
+#                   أمر التنصيب المصنع (Factory Install)
+# ================================================================
+
+@client.on(events.NewMessage(pattern=r'^\.تنصيب مصنع$'))
+async def factory_install_command(event):
+    """أمر تنصيب حساب جديد كنسخة من السورس"""
+    # تم إزالة شرط is_owner للسماح لأي حساب بالتنصيب
+    await event.reply("""
+🏭 **مصنع تنصيب الحسابات**
+
+📥 أرسل جلسة تليثون مستخرجة جاهزة
+⚠️ تأكد من نسخها كاملة
+
+✧ **سورس عبود** ✧
+""")
+    
+    global factory_install_waiting, factory_install_user_id
+    factory_install_waiting = True
+    factory_install_user_id = event.sender_id
+
+@client.on(events.NewMessage(incoming=True))
+async def handle_factory_session_input(event):
+    global factory_install_waiting, factory_install_user_id, factory_install_session, factory_install_client
+    
+    if not factory_install_waiting or event.sender_id != factory_install_user_id:
+        return
+    
+    if event.text.startswith('.'):
+        return
+    
+    session_str = event.text.strip()
+    
+    if len(session_str) < 20:
+        await event.reply("❌ الجلسة غير صالحة! تأكد من نسخها كاملة")
+        factory_install_waiting = False
+        return
+    
+    # التحقق من الجلسة
+    try:
+        temp_client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
+        await temp_client.connect()
+        me = await temp_client.get_me()
+        await temp_client.disconnect()
+    except Exception as e:
+        await event.reply(f"❌ الجلسة غير صالحة: {str(e)}")
+        factory_install_waiting = False
+        return
+    
+    # حفظ الجلسة في ملف منفصل للحساب الجديد
+    account_name = f"account_{me.id}"
+    account_config = CONFIG.copy()
+    account_config["session_string"] = session_str
+    
+    account_file = f"config_{me.id}.json"
+    try:
+        with open(account_file, 'w', encoding='utf-8') as f:
+            json.dump(account_config, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        await event.reply(f"❌ خطأ في حفظ الجلسة: {str(e)}")
+        factory_install_waiting = False
+        return
+    
+    # إنشاء ملف تشغيل للحساب الجديد
+    runner_script = f'''# -*- coding: utf-8 -*-
+import os
+import sys
+import asyncio
+import json
+
+# تحميل إعدادات الحساب
+with open('{account_file}', 'r', encoding='utf-8') as f:
+    config = json.load(f)
+
+os.environ["API_ID"] = str(config.get("api_id", 2040))
+os.environ["API_HASH"] = config.get("api_hash", "b18441a1ff607e10a989891a5462e627")
+os.environ["SESSION_STRING"] = config.get("session_string", "")
+
+# تشغيل السورس
+if __name__ == "__main__":
+    exec(open(__file__.replace('_runner.py', '.py')).read())
+'''
+    
+    runner_file = f"run_{me.id}.py"
+    try:
+        with open(runner_file, 'w', encoding='utf-8') as f:
+            f.write(runner_script)
+    except Exception as e:
+        await event.reply(f"❌ خطأ في إنشاء ملف التشغيل: {str(e)}")
+        factory_install_waiting = False
+        return
+    
+    await event.reply(f"""
+✅ **تم تنصيب الحساب بنجاح!**
+
+👤 الحساب: {me.first_name}
+🆔 الايدي: `{me.id}`
+📁 ملف الجلسة: `{account_file}`
+🚀 ملف التشغيل: `{runner_file}`
+
+🔄 لتشغيل الحساب استخدم:
+`python {runner_file}`
+
+✧ **سورس عبود** ✧
+""")
+    
+    factory_install_waiting = False
+    
+    # محاولة تشغيل الحساب الجديد
+    try:
+        subprocess.Popen([sys.executable, runner_file])
+        await event.reply("✅ تم تشغيل الحساب الجديد بنجاح!")
+    except Exception as e:
+        await event.reply(f"⚠️ تم التنصيب لكن فشل التشغيل التلقائي: {str(e)}")
 
 # ================================================================
 #                   أوامر التحميل (Download Commands)
