@@ -738,7 +738,7 @@ class jmthon:
 
 ALIVE_ET = Config.ALIVE_ET or "فحص"
 
-@jmthon.ar_cmd(pattern=f"{ALIVE_ET}(?:\s|$)([\s\S]*)")
+@jmthon.ar_cmd(pattern=rf"{ALIVE_ET}(?:\s|$)([\s\S]*)")
 async def amireallyalive(event):
     reply_to_id = await reply_id(event)
     uptime = await get_readable_time((time.time() - StartTime))
@@ -1658,7 +1658,7 @@ async def clone_commands(event):
 @jmthon.ar_cmd(pattern="اوامر التقليد$")
 async def mimic_commands(event):
     await event.edit(
-        "شرح عن أوامر التقليد \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.تقليد` ) \n بالرد على الشخص لتقليد جميع رسائله في الدردشه\n\n- ( `.الغاء التقليد` ) \n بالرد على الشخص لايقاف التقليد\n\n- ( `.المقلدهم` ) \nلاظهار قائمه الاشخاص الذي فعلت عليهم امر التقليد ولمسحهم ارسل (`.مسح المقلدهم`)\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
+        "شرح عن أوامر التقليد \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.تقليد` ) \n بالرد على الشخص لتقليد جميع رسائله في الدردشه\n\n- ( `.الغاء التقليد` ) \n بالرد على الشخص لايقاف التقليد\n\n- ( `.المقلدهم` )\nلاظهار قائمه الاشخاص الذي فعلت عليهم امر التقليد ولمسحهم ارسل (`.مسح المقلدهم`)\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
     )
 
 @jmthon.ar_cmd(pattern="اوامر المنشن$")
