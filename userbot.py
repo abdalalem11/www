@@ -702,7 +702,17 @@ def media_type(message):
             return "استطلاع"
     return None
 
-# ========== حقن الديكورات ==========
+# =====================================================================
+#                        الكود المتبقي مع إصلاح الخطأ
+# =====================================================================
+
+# هنا سيتم وضع جميع الأوامر المطلوبة بنفس الترتيب السابق
+# ولكن مع إصلاح خطأ def tgbot
+
+# =====================================================================
+#                        فئة الديكورات (المعدلة)
+# =====================================================================
+
 class jmthon:
     @staticmethod
     def ar_cmd(pattern=None, command=None, info=None, disable_errors=False):
@@ -717,12 +727,10 @@ class jmthon:
         return decorator
     
     @staticmethod
-    def tgbot:
-        @staticmethod
-        def on(event):
-            def decorator(func):
-                return func
-            return decorator
+    def tgbot():
+        def decorator(func):
+            return func
+        return decorator
 
 # =====================================================================
 #                        أَمْرُ فَحْص (ALIVE)
@@ -730,7 +738,7 @@ class jmthon:
 
 ALIVE_ET = Config.ALIVE_ET or "فحص"
 
-@jmthon.on(admin_cmd(pattern=f"{ALIVE_ET}(?:\s|$)([\s\S]*)"))
+@jmthon.ar_cmd(pattern=f"{ALIVE_ET}(?:\s|$)([\s\S]*)")
 async def amireallyalive(event):
     reply_to_id = await reply_id(event)
     uptime = await get_readable_time((time.time() - StartTime))
@@ -1596,7 +1604,7 @@ async def pin_commands(event):
 @jmthon.ar_cmd(pattern="اوامر الاشراف$")
 async def admin_commands(event):
     await event.edit(
-        "شرح عن أوامر الاشراف \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n( `.رفع مشرف` ) \n- تقوم بالرد على الشخص مع الامر و سيرفع مشرفا في المجموعة\n\n( `.تنزيل مشرف` )\n- بالرد على الشخص مع الامر لإنزاله من الاشراف في المجموعة\n\n( `.اخفاء` ) \n- لرفع المستخدم في جميع المجموعات مع كافة الصلاحيات مع لقب مخفي\n\n( `.تنزيل مشرف` ) \n-لتنزيل الشخص من رتبة الاشراف في جميع المجموعات\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
+        "شرح عن أوامر الاشراف \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n( `.رفع مشرف` ) \n- تقوم بالرد على الشخص مع الامر و سيرفع مشرفا في المجموعة\n\n( `.تنزيل مشرف` )\n- بالرد على الشخص مع الامر لإنزاله من الاشراف في المجموعة\n\n( `.اخفاء` ) \n- لرفع المستخدم في جميع المجموعات مع كافة الصلاحيات مع لقب مخفي\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
     )
 
 @jmthon.ar_cmd(pattern="اوامر التفليش$")
@@ -3520,7 +3528,7 @@ async def startmute(event):
         if is_muted(event.chat_id, event.chat_id):
             return await event.edit("**- ❝ ⌊هذا المستخدم مكتوم .. سابقاً**")
         if event.chat_id == client.uid:
-            return await edit_delete(event, "**- لا تستطع كتم نفسك**")
+            return await edit_delete(event, "**- لا تستطع كتم نفسي**")
         if event.chat_id == 5502537272:
             return await edit_delete(event, "**╮ ❐ دي لا يمكنني كتم احد مطورين السورس ❏╰**")
         try:
