@@ -559,48 +559,47 @@ async def edit_delete(event, text, time=5):
     await msg.delete()
 
 async def get_user_from_event(event):
-    if event.reply_to_msg_id:
-        previous_message = await event.get_reply_message()
-        user_object = await event.client.get_entity(previous_message.sender_id)
-    else:
-        user = event.pattern_match.group(1) if hasattr(event.pattern_match, 'group') and event.pattern_match.group(1) else None
-        if user and user.isnumeric():
-            user = int(user)
-        if not user:
-            self_user = await event.client.get_me()
-            user = self_user.id
-        if event.message.entities:
-            probable_user_mention_entity = event.message.entities[0]
-            if isinstance(probable_user_mention_entity, MessageEntityMentionName):
-                user_id = probable_user_mention_entity.user_id
-                user_obj = await event.client.get_entity(user_id)
-                return user_obj
-        if isinstance(user, int) or (user and user.startswith("@")):
-            user_obj = await event.client.get_entity(user)
-            return user_obj
-        try:
-            user_object = await event.client.get_entity(user)
-        except (TypeError, ValueError) as err:
-            await event.edit(str(err))
-            return None
-    return user_object
-
-def get_saudi_time():
-    utc_now = datetime.utcnow()
-    saudi_time = utc_now + SAUDI_OFFSET
-    return saudi_time
+    """جلب المستخدم من الحدث"""
+    user = None
+    try:
+        # محاولة جلب من الرد
+        if event.reply_to_msg_id:
+            previous_message = await event.get_reply_message()
+            if previous_message and previous_message.sender_id:
+                user = await event.client.get_entity(previous_message.sender_id)
+                return user
+        
+        # محاولة جلب من النص
+        if event.pattern_match and event.pattern_match.group(1):
+            user_input = event.pattern_match.group(1).strip()
+            if user_input:
+                try:
+                    if user_input.isdigit():
+                        user = await event.client.get_entity(int(user_input))
+                    else:
+                        user = await event.client.get_entity(user_input)
+                    return user
+                except:
+                    pass
+        
+        # جلب المرسل نفسه
+        if event.sender_id:
+            user = await event.client.get_entity(event.sender_id)
+            return user
+        
+        return None
+    except Exception as e:
+        print(f"خطأ في get_user_from_event: {e}")
+        return None
 
 async def is_owner(event):
-    if event.raw_text and any(cmd in event.raw_text for cmd in OWNER_ONLY_COMMANDS):
-        return True
+    """التحقق من أن المستخدم هو المالك"""
     try:
         me = await event.client.get_me()
         sender = await event.get_sender()
         return sender.id == me.id
     except:
         return False
-
-OWNER_ONLY_COMMANDS = ['.تنصيب', '.تنصيب جلسة', '.تنصيب مصنع']
 
 async def update_name(first_name, last_name=None):
     try:
@@ -702,12 +701,10 @@ def media_type(message):
             return "استطلاع"
     return None
 
-# =====================================================================
-#                        الكود المتبقي مع إصلاح الخطأ
-# =====================================================================
-
-# هنا سيتم وضع جميع الأوامر المطلوبة بنفس الترتيب السابق
-# ولكن مع إصلاح خطأ def tgbot
+def get_saudi_time():
+    utc_now = datetime.utcnow()
+    saudi_time = utc_now + SAUDI_OFFSET
+    return saudi_time
 
 # =====================================================================
 #                        فئة الديكورات (المعدلة)
@@ -715,19 +712,8 @@ def media_type(message):
 
 class jmthon:
     @staticmethod
-    def ar_cmd(pattern=None, command=None, info=None, disable_errors=False):
-        def decorator(func):
-            return func
-        return decorator
-    
-    @staticmethod
-    def on(event):
-        def decorator(func):
-            return func
-        return decorator
-    
-    @staticmethod
-    def tgbot():
+    def ar_cmd(pattern=None, **kwargs):
+        """ديكور معدل للأوامر"""
         def decorator(func):
             return func
         return decorator
@@ -738,7 +724,7 @@ class jmthon:
 
 ALIVE_ET = Config.ALIVE_ET or "فحص"
 
-@jmthon.ar_cmd(pattern=rf"{ALIVE_ET}(?:\s|$)([\s\S]*)")
+@jmthon.ar_cmd(pattern=rf"{ALIVE_ET}")
 async def amireallyalive(event):
     reply_to_id = await reply_id(event)
     uptime = await get_readable_time((time.time() - StartTime))
@@ -750,6 +736,7 @@ async def amireallyalive(event):
     EMOJI = gvarstatus("ALIVE_EMOJI") or "✇ ◅"
     ALIVE_TEXT = gvarstatus("ALIVE_TEXT") or "**[ سورس عبود يعمل ✓ ](t.me/SSSTlF)**"
     RR7_IMG = gvarstatus("ALIVE_PIC") or Config.A_PIC
+    me = await event.client.get_me()
     temp = """{ALIVE_TEXT}
 **{EMOJI} قاعدة البيانات ↜ ** تعمل بنجاح ✓
 **{EMOJI} إصدار التيليثون ↜ :** `{telever}`
@@ -762,7 +749,7 @@ async def amireallyalive(event):
     caption = jmthon_caption.format(
         ALIVE_TEXT=ALIVE_TEXT,
         EMOJI=EMOJI,
-        mention=mention(await event.client.get_me()),
+        mention=mention(me),
         uptime=uptime,
         telever=version.__version__,
         jmver=JMVERSION,
@@ -785,1187 +772,6 @@ async def amireallyalive(event):
             )
     else:
         await edit_or_reply(event, caption)
-
-# =====================================================================
-#                        أَمْرُ إِعَادَةِ التَّشْغِيلِ
-# =====================================================================
-
-@jmthon.ar_cmd(pattern="اعادة تشغيل$")
-async def restart_bot(event):
-    if BOTLOG:
-        await event.client.send_message(BOTLOG_CHATID, "**⌯︙إعادة التشغيل ↻** \n**⌯︙تم إعادة تشغيل البوت ↻**")
-    RR7PP = await edit_or_reply(event, "**⌯︙جاري إعادة التشغيل، قد يستغرق الأمر 2-3 دقائق لا تقم بإعادة التشغيل مرة أخرى انتظر ⏱**")
-    try:
-        await client.disconnect()
-    except:
-        pass
-    try:
-        subprocess.Popen([sys.executable, __file__])
-        sys.exit(0)
-    except:
-        await RR7PP.edit("⚠️ أعد تشغيل البوت يدوياً")
-
-@jmthon.ar_cmd(pattern="اطفاء$")
-async def shutdown_bot(event):
-    if BOTLOG:
-        await event.client.send_message(BOTLOG_CHATID, "**⌯︙إيقاف التشغيل ✕ **\n**⌯︙تم إيقاف تشغيل البوت بنجاح ✓**")
-    await edit_or_reply(event, "**⌯︙جاري إيقاف تشغيل البوت الآن ..**\n⌯︙ **أعد تشغيل يدوياً لاحقاً عبر هيروكو ..**\n⌯︙**سيبقى البوت متوقفاً عن العمل**")
-    if HEROKU_APP_NAME and HEROKU_API_KEY and Heroku:
-        app = Heroku.app(HEROKU_APP_NAME)
-        app.process_formation()["worker"].scale(0)
-    else:
-        sys.exit(0)
-
-@jmthon.ar_cmd(pattern="التحديثات (تشغيل|ايقاف)$")
-async def set_pmlog(event):
-    input_str = event.pattern_match.group(1)
-    if input_str == "ايقاف":
-        if gvarstatus("restartupdate") is None:
-            return await edit_delete(event, "**⌯︙تم تعطيل التحديثات بالفعل ❗️**")
-        delgvar("restartupdate")
-        return await edit_or_reply(event, "**⌯︙تم تعطيل التحديثات بنجاح ✓**")
-    if gvarstatus("restartupdate") is None:
-        addgvar("restartupdate", "turn-oned")
-        return await edit_or_reply(event, "**⌯︙تم تشغيل التحديثات بنجاح ✓**")
-    await edit_delete(event, "**⌯︙تم تشغيل التحديثات بالفعل ❗️**")
-
-# =====================================================================
-#                        أَمْرُ الِانْتِحَالِ
-# =====================================================================
-
-@jmthon.ar_cmd(pattern="انتحال(?:\s|$)([\s\S]*)")
-async def clone_account(event):
-    replied_user, error_i_a = await get_user_from_event(event)
-    if replied_user is None:
-        return
-    user_id = replied_user.id
-    profile_pic = await event.client.download_profile_photo(user_id, "downloads")
-    first_name = html.escape(replied_user.first_name or "مستخدم")
-    first_name = first_name.replace("\u2060", "")
-    last_name = replied_user.last_name
-    if last_name:
-        last_name = html.escape(last_name).replace("\u2060", "")
-    else:
-        last_name = " "
-    replied_user_full = await event.client(GetFullUserRequest(replied_user.id))
-    user_bio = replied_user_full.about or ""
-    await event.client(UpdateProfileRequest(first_name=first_name))
-    await event.client(UpdateProfileRequest(last_name=last_name))
-    await event.client(UpdateProfileRequest(about=user_bio))
-    if profile_pic:
-        pfile = await event.client.upload_file(profile_pic)
-        await event.client(UploadProfilePhotoRequest(pfile))
-        os.remove(profile_pic)
-    await edit_delete(event, "⌯︙تم نسخ الحساب بنجاح ✅")
-    if BOTLOG:
-        await event.client.send_message(BOTLOG_CHATID, f"#CLONED\nsuccessfully cloned [{first_name}](tg://user?id={user_id})")
-
-@jmthon.ar_cmd(pattern="اعادة$")
-async def revert_account(event):
-    name = f"{DEFAULTUSER}"
-    bio = gvarstatus("DEFAULT_BIO") or "سورس عبود @SSSTlF"
-    await event.client(DeletePhotosRequest(await event.client.get_profile_photos("me", limit=1)))
-    await event.client(UpdateProfileRequest(about=bio))
-    await event.client(UpdateProfileRequest(first_name=name))
-    await event.client(UpdateProfileRequest(last_name=""))
-    await edit_delete(event, "⌯︙تم إعادة الحساب إلى وضعه الأصلي ✅")
-    if BOTLOG:
-        await event.client.send_message(BOTLOG_CHATID, f"⌯︙تم إعادة الحساب الى وضعه الأصلي ✅")
-
-# =====================================================================
-#                        أَوَامِرُ الْفَارَاتِ (HEROKU VARS)
-# =====================================================================
-
-@jmthon.ar_cmd(pattern="وضع (.*)")
-async def set_var(var):
-    if not HEROKU_API_KEY or not HEROKU_APP_NAME:
-        return await edit_delete(var, "عزيزي المستخدم يجب تعيين `HEROKU_API_KEY` و `HEROKU_APP_NAME`.")
-    app = Heroku.app(HEROKU_APP_NAME)
-    rep = await var.get_reply_message()
-    vra = rep.text if rep else var.pattern_match.group(1)
-    if not vra:
-        return await edit_delete(var, "**⌯︙يجب عليك الرد على النص أو الرابط حسب الفار الذي تضيفه**")
-    exe = var.pattern_match.group(1)
-    await edit_or_reply(var, "**⌯︙جاري وضع الفار انتظر قليلا**")
-    heroku_var = app.config()
-    var_map = {
-        "توقيت": "TZ",
-        "رمز الاسم": "TIME_JEP",
-        "البايو": "DEFAULT_BIO",
-        "النبذة": "DEFAULT_BIO",
-        "الصورة": "DIGITAL_PIC",
-        "الصوره": "DIGITAL_PIC",
-        "زخرفة الارقام": "JP_FN",
-        "زخرفه الارقام": "JP_FN",
-        "اسم": "ALIVE_NAME",
-        "الاسم": "ALIVE_NAME",
-        "كروب التخزين": "PM_LOGGER_GROUP_ID",
-        "كروب الحفظ": "PRIVATE_GROUP_BOT_API_ID"
-    }
-    if exe in var_map:
-        heroku_var[var_map[exe]] = vra
-        await edit_or_reply(var, f"**⌯︙تم بنجاح تغيير فار {exe}\n\n❃ جار إعادة تشغيل السورس انتظر من 2-5 دقائق ليتشغل مرة أخرى**")
-
-@jmthon.ar_cmd(pattern="ازالة (.*)")
-async def del_var(event):
-    if not HEROKU_API_KEY or not HEROKU_APP_NAME:
-        return await edit_delete(event, "عزيزي المستخدم يجب تعيين `HEROKU_API_KEY` و `HEROKU_APP_NAME`.")
-    app = Heroku.app(HEROKU_APP_NAME)
-    exe = event.pattern_match.group(1)
-    heroku_var = app.config()
-    await edit_or_reply(event, "**⌯︙جاري حذف الفار انتظر قليلا**")
-    var_map = {
-        "رمز الاسم": "TIME_JEP",
-        "البايو": "DEFAULT_BIO",
-        "النبذة": "DEFAULT_BIO",
-        "الصورة": "DIGITAL_PIC",
-        "الصوره": "DIGITAL_PIC",
-        "زخرفة الارقام": "JP_FN",
-        "زخرفه الارقام": "JP_FN",
-        "اسم": "ALIVE_NAME",
-        "الاسم": "ALIVE_NAME",
-        "كروب التخزين": "PM_LOGGER_GROUP_ID",
-        "كروب الحفظ": "PRIVATE_GROUP_BOT_API_ID"
-    }
-    if exe in var_map and var_map[exe] in heroku_var:
-        del heroku_var[var_map[exe]]
-        await edit_or_reply(event, f"**⌯︙تم بنجاح حذف فار {exe}\n\n❃ جار إعادة تشغيل السورس انتظر من 2-5 دقائق ليتشغل مرة أخرى**")
-    else:
-        await edit_or_reply(event, f"**⌯︙لم تتم إضافة فار {exe} بالأصل.**")
-
-@jmthon.ar_cmd(pattern="وقت(?:\s|$)([\s\S]*)")
-async def set_time_zone(event):
-    if not HEROKU_API_KEY or not HEROKU_APP_NAME:
-        return await edit_delete(event, "عزيزي المستخدم يجب تعيين `HEROKU_API_KEY` و `HEROKU_APP_NAME`.")
-    app = Heroku.app(HEROKU_APP_NAME)
-    exe = event.pattern_match.group(1)
-    heroku_var = app.config()
-    time_zones = {
-        "العراق": "Asia/Baghdad",
-        "عراق": "Asia/Baghdad",
-        "السعودية": "Asia/Riyadh",
-        "السعوديه": "Asia/Riyadh",
-        "مصر": "Africa/Cairo",
-        "الاردن": "Asia/Amman",
-        "اليمن": "Asia/Aden",
-        "سوريا": "Asia/Damascus"
-    }
-    if exe in time_zones:
-        heroku_var["TZ"] = time_zones[exe]
-        await edit_or_reply(event, f"**⌯︙تم بنجاح تغيير الوقت إلى {exe}\n\n❃ جار إعادة تشغيل السورس انتظر من 2-5 دقائق**")
-
-@jmthon.ar_cmd(pattern="استخدامي$")
-async def dyno_usage(dyno):
-    if not HEROKU_API_KEY or not HEROKU_APP_NAME:
-        return await edit_delete(dyno, "عزيزي المستخدم يجب تعيين `HEROKU_API_KEY` و `HEROKU_APP_NAME`.")
-    dyno = await edit_or_reply(dyno, "**- يتم جلب المعلومات انتظر قليلا**")
-    useragent = "Mozilla/5.0 (Linux; Android 10; SM-G975F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Mobile Safari/537.36"
-    user_id = Heroku.account().id
-    headers = {"User-Agent": useragent, "Authorization": f"Bearer {HEROKU_API_KEY}", "Accept": "application/vnd.heroku+json; version=3.account-quotas"}
-    r = get(heroku_api + f"/accounts/{user_id}/actions/get-quota", headers=headers)
-    if r.status_code != 200:
-        return await dyno.edit(f"**خطأ: {r.reason}**")
-    result = r.json()
-    quota = result["account_quota"]
-    quota_used = result["quota_used"]
-    remaining_quota = quota - quota_used
-    percentage = int(remaining_quota / quota * 100)
-    minutes_remaining = remaining_quota / 60
-    hours = int(minutes_remaining // 60)
-    minutes = int(minutes_remaining % 60)
-    App = result["apps"]
-    try:
-        AppQuotaUsed = App[0]["quota_used"] / 60
-        AppPercentage = int(App[0]["quota_used"] * 100 / quota)
-    except (IndexError, KeyError):
-        AppQuotaUsed = 0
-        AppPercentage = 0
-    AppHours = int(AppQuotaUsed // 60)
-    AppMinutes = int(AppQuotaUsed % 60)
-    await asyncio.sleep(1.5)
-    return await dyno.edit(f"**استخدام الدينو**:\n\n"
-        f" -> استخدام الدينو لتطبيق **{HEROKU_APP_NAME}**:\n"
-        f"     • `{AppHours}` ساعات `{AppMinutes}` دقائق **|** [`{AppPercentage}`%]\n\n"
-        f" -> الساعات المتبقية لهذا الشهر:\n"
-        f"     • `{hours}` ساعات `{minutes}` دقائق **|** [`{percentage}`%]")
-
-@jmthon.ar_cmd(pattern="لوك$")
-async def heroku_logs(dyno):
-    if not HEROKU_API_KEY or not HEROKU_APP_NAME:
-        return await edit_delete(dyno, "عزيزي المستخدم يجب تعيين `HEROKU_API_KEY` و `HEROKU_APP_NAME`.")
-    try:
-        app = Heroku.app(HEROKU_APP_NAME)
-        data = app.get_log()
-        await edit_or_reply(dyno, data, deflink=True, linktext="**آخر 100 سطر في لوك هيروكو:**")
-    except Exception as e:
-        await edit_or_reply(dyno, f"**خطأ:** `{str(e)}`")
-
-# =====================================================================
-#                        أَوَامِرُ الْفَارَاتِ فِي قَاعِدَةِ الْبَيَانَاتِ
-# =====================================================================
-
-vlist = [
-    "ALIVE_PIC", "ALIVE_EMOJI", "ALIVE_TEMPLATE", "ALIVE_TEXT",
-    "SC_TEXT", "PM_PIC", "PM_TEXT", "PM_BLOCK", "MAX_FLOOD_IN_PMS",
-    "START_TEXT", "TIME_JM", "CUSTOM_STICKER_PACKNAME", "ALIVE_NAME", "ID_ET"
-]
-
-oldvars = {"PM_PIC": "pmpermit_pic", "PM_TEXT": "pmpermit_txt", "PM_BLOCK": "pmblock"}
-
-@jmthon.ar_cmd(pattern="(اضف_|معلومات_|حذف_)فار(?: |$)([\s\S]*)")
-async def db_var(event):
-    cmd = event.pattern_match.group(1).lower()
-    vname = event.pattern_match.group(2)
-    vnlist = "".join(f"{i+1}. `{each}`\n" for i, each in enumerate(vlist))
-    if not vname:
-        return await edit_delete(event, f"**📑 يجب وضع المتغير الصحيح من هنا:\n\n{vnlist}**", time=60)
-    vinfo = None
-    if " " in vname:
-        vname, vinfo = vname.split(" ", 1)
-    reply = await event.get_reply_message()
-    if not vinfo and reply:
-        vinfo = reply.text
-    if vname in vlist:
-        if vname in oldvars:
-            vname = oldvars[vname]
-        if cmd == "اضف_":
-            if not vinfo:
-                return await edit_delete(event, "**⌯︙يجب وضع القيمة الصحيحة أولاً**")
-            check = vinfo.split(" ")
-            for i in check:
-                if (("PIC" in vname) or ("pic" in vname)) and url and not url(i):
-                    return await edit_delete(event, "**⌯︙يجب وضع رابط صحيح أولاً**")
-            addgvar(vname, vinfo)
-            await edit_delete(event, f"📑 القيمة **{vname}**\nتم تغييرها لـ: `{vinfo}`", time=20)
-        elif cmd == "معلومات_":
-            var_data = gvarstatus(vname)
-            await edit_delete(event, f"📑 القيمة لـ **{vname}** هي `{var_data}`", time=20)
-        elif cmd == "حذف_":
-            delgvar(vname)
-            await edit_delete(event, f"📑 القيمة لـ **{vname}**\nتم حذفها ووضع القيمة الأصلية لها", time=20)
-    else:
-        await edit_delete(event, f"**📑 يجب وضع المتغير الصحيح من هذه القائمة:\n\n{vnlist}**", time=60)
-
-# =====================================================================
-#                        أَمْرُ ضِيفْ (إضافة الأعضاء)
-# =====================================================================
-
-async def get_chatinfo(event):
-    chat = event.pattern_match.group(1)
-    chat_info = None
-    if chat:
-        try:
-            chat = int(chat)
-        except ValueError:
-            pass
-    if not chat:
-        if event.reply_to_msg_id:
-            replied_msg = await event.get_reply_message()
-            if replied_msg.fwd_from and replied_msg.fwd_from.channel_id is not None:
-                chat = replied_msg.fwd_from.channel_id
-        else:
-            chat = event.chat_id
-    try:
-        chat_info = await event.client(GetFullChatRequest(chat))
-    except:
-        try:
-            chat_info = await event.client(GetFullChannelRequest(chat))
-        except:
-            await event.reply("**⌯︙لم يتم العثور على المجموعة أو القناة**")
-            return None
-    return chat_info
-
-@jmthon.ar_cmd(pattern=r"ضيف ?(.*)")
-async def add_users(event):
-    sender = await event.get_sender()
-    me = await event.client.get_me()
-    if sender.id != me.id:
-        roz = await event.reply("**⌯︙تتم العملية انتظر قليلا 🧸♥ ...**")
-    else:
-        roz = await event.edit("**⌯︙تتم العملية انتظر قليلا 🧸♥ ...**")
-    JepThon = await get_chatinfo(event)
-    chat = await event.get_chat()
-    if event.is_private:
-        return await roz.edit("**⌯︙لا يمكنني إضافة المستخدمين هنا**")
-    s = 0
-    f = 0
-    error = 'None'
-    await roz.edit("**⌯︙حالة الإضافة:**\n\n**⌯︙يتم جمع معلومات المستخدمين 🔄 ...⌣**")
-    async for user in event.client.iter_participants(JepThon.full_chat.id):
-        try:
-            if error.startswith("Too"):
-                return await roz.edit(f"**حالة الإضافة انتهت مع الأخطاء**\n(**ربما هناك ضغط على الأمر حاول مجددا لاحقا 🧸**)\n**الخطأ:**\n`{error}`\n\n• أضيف `{s}`\n• خطأ بإضافة `{f}`")
-            await event.client(InviteToChannelRequest(channel=chat, users=[user.id]))
-            s += 1
-            await roz.edit(f"**⌯︿ تتم الإضافة 🧸♥**\n\n• أضيف `{s}`\n• خطأ بإضافة `{f}`\n\n**× آخر خطأ:** `{error}`")
-        except Exception as e:
-            error = str(e)
-            f += 1
-    return await roz.edit(f"**⌯︿ اكتملت الإضافة ✅**\n\n• تم بنجاح إضافة `{s}`\n• خطأ بإضافة `{f}`")
-
-# =====================================================================
-#                        أَمْرُ تَخْزِينِ الْخَاصِّ وَالْكُرُوبَاتِ
-# =====================================================================
-
-class LOG_CHATS:
-    def __init__(self):
-        self.RECENT_USER = None
-        self.NEWPM = None
-        self.COUNT = 0
-
-LOG_CHATS_ = LOG_CHATS()
-
-@jmthon.ar_cmd(pattern="", func=lambda e: e.is_private and not e.out, allow_edited_updates=False)
-async def monitor_pms(event):
-    if Config.PM_LOGGER_GROUP_ID == -100:
-        return
-    if gvarstatus("PMLOG") and gvarstatus("PMLOG") == "false":
-        return
-    sender = await event.get_sender()
-    if not sender.bot:
-        chat = await event.get_chat()
-        if not no_log_pms_sql.is_approved(chat.id) and chat.id != 777000:
-            if LOG_CHATS_.RECENT_USER != chat.id:
-                LOG_CHATS_.RECENT_USER = chat.id
-                if LOG_CHATS_.NEWPM:
-                    if LOG_CHATS_.COUNT > 1:
-                        await LOG_CHATS_.NEWPM.edit(LOG_CHATS_.NEWPM.text.replace("رسالة جديدة", f"{LOG_CHATS_.COUNT} "))
-                    else:
-                        await LOG_CHATS_.NEWPM.edit(LOG_CHATS_.NEWPM.text.replace("رسالة جديدة", f"{LOG_CHATS_.COUNT} "))
-                    LOG_CHATS_.COUNT = 0
-                LOG_CHATS_.NEWPM = await event.client.send_message(
-                    Config.PM_LOGGER_GROUP_ID,
-                    f"👤{mention(sender)}\n**قام بإرسال رسالة جديدة**\nايدي الشخص: `{chat.id}`",
-                )
-            try:
-                if event.message:
-                    await event.client.forward_messages(Config.PM_LOGGER_GROUP_ID, event.message, silent=True)
-                LOG_CHATS_.COUNT += 1
-            except Exception as e:
-                pass
-
-@jmthon.ar_cmd(pattern="تخزين الخاص (تشغيل|ايقاف)$")
-async def set_pmlog(event):
-    input_str = event.pattern_match.group(1)
-    h_type = True if input_str == "تشغيل" else False
-    if gvarstatus("PMLOG") and gvarstatus("PMLOG") == "false":
-        PMLOG = False
-    else:
-        PMLOG = True
-    if PMLOG:
-        if h_type:
-            await event.edit("**⌯︙تخزين رسائل الخاص بالفعل ممكنة ✅**")
-        else:
-            addgvar("PMLOG", False)
-            await event.edit("**⌯︙تم تعطيل تخزين رسائل الخاص بنجاح ✅**")
-    elif h_type:
-        addgvar("PMLOG", True)
-        await event.edit("**⌯︙تم تفعيل تخزين رسائل الخاص بنجاح ✅**")
-    else:
-        await event.edit("**⌯︙تخزين رسائل الخاص بالفعل معطلة ✅**")
-
-@jmthon.ar_cmd(pattern="تخزين الكروبات (تشغيل|ايقاف)$")
-async def set_grplog(event):
-    input_str = event.pattern_match.group(1)
-    h_type = True if input_str == "تشغيل" else False
-    if gvarstatus("GRPLOG") and gvarstatus("GRPLOG") == "false":
-        GRPLOG = False
-    else:
-        GRPLOG = True
-    if GRPLOG:
-        if h_type:
-            await event.edit("**⌯︙تخزين رسائل الكروبات بالفعل ممكنة ✅**")
-        else:
-            addgvar("GRPLOG", False)
-            await event.edit("**⌯︙تم تعطيل تخزين رسائل الكروبات بنجاح ✅**")
-    elif h_type:
-        addgvar("GRPLOG", True)
-        await event.edit("**⌯︙تم تفعيل تخزين رسائل الكروبات بنجاح ✅**")
-    else:
-        await event.edit("**⌯︙تخزين رسائل الكروبات بالفعل معطلة ✅**")
-
-# =====================================================================
-#                        أَمْرُ حِمَايَةِ الْخَاصِّ (PM PERMIT)
-# =====================================================================
-
-async def do_pm_permit_action(event, chat):
-    reply_to_id = await reply_id(event)
-    try:
-        PM_WARNS = sql.get_collection("pmwarns").json
-    except AttributeError:
-        PM_WARNS = {}
-    try:
-        PMMESSAGE_CACHE = sql.get_collection("pmmessagecache").json
-    except AttributeError:
-        PMMESSAGE_CACHE = {}
-    me = await event.client.get_me()
-    mention_user = f"[{chat.first_name}](tg://user?id={chat.id})"
-    my_mention = f"[{me.first_name}](tg://user?id={me.id})"
-    first = chat.first_name
-    last = chat.last_name
-    fullname = f"{first} {last}" if last else first
-    username = f"@{chat.username}" if chat.username else mention_user
-    userid = chat.id
-    my_first = me.first_name
-    my_last = me.last_name
-    my_fullname = f"{my_first} {my_last}" if my_last else my_first
-    my_username = f"@{me.username}" if me.username else my_mention
-    if str(chat.id) not in PM_WARNS:
-        PM_WARNS[str(chat.id)] = 0
-    try:
-        MAX_FLOOD_IN_PMS = int(gvarstatus("MAX_FLOOD_IN_PMS") or 6)
-    except (ValueError, TypeError):
-        MAX_FLOOD_IN_PMS = 6
-    totalwarns = MAX_FLOOD_IN_PMS + 1
-    warns = PM_WARNS[str(chat.id)] + 1
-    remwarns = totalwarns - warns
-    if PM_WARNS[str(chat.id)] >= MAX_FLOOD_IN_PMS:
-        try:
-            if str(chat.id) in PMMESSAGE_CACHE:
-                await event.client.delete_messages(chat.id, PMMESSAGE_CACHE[str(chat.id)])
-                del PMMESSAGE_CACHE[str(chat.id)]
-        except Exception as e:
-            pass
-        custompmblock = gvarstatus("pmblock") or None
-        if custompmblock is not None:
-            USER_BOT_WARN_ZERO = custompmblock.format(mention=mention_user, first=first, last=last, fullname=fullname, username=username, userid=userid, my_first=my_first, my_last=my_last, my_fullname=my_fullname, my_username=my_username, my_mention=my_mention, totalwarns=totalwarns, warns=warns, remwarns=remwarns)
-        else:
-            USER_BOT_WARN_ZERO = "⌯︙حذرك وكتلك لا تكرر تم حظرك بنجاح ما أكدر اخليك تزعج المالك \n- ⌯︙بباي 🙁🤍"
-        msg = await event.reply(USER_BOT_WARN_ZERO)
-        await event.client(BlockRequest(chat.id))
-        the_message = f"#المحظورين_الحمايه\n[{get_display_name(chat)}](tg://user?id={chat.id}) تم حظره\n⌯︙عدد الرسائل: {PM_WARNS[str(chat.id)]}"
-        del PM_WARNS[str(chat.id)]
-        sql.del_collection("pmwarns")
-        sql.del_collection("pmmessagecache")
-        sql.add_collection("pmwarns", PM_WARNS, {})
-        sql.add_collection("pmmessagecache", PMMESSAGE_CACHE, {})
-        try:
-            return await event.client.send_message(BOTLOG_CHATID, the_message)
-        except BaseException:
-            return
-    custompmpermit = gvarstatus("pmpermit_txt") or None
-    if custompmpermit is not None:
-        USER_BOT_NO_WARN = custompmpermit.format(mention=mention_user, first=first, last=last, fullname=fullname, username=username, userid=userid, my_first=my_first, my_last=my_last, my_fullname=my_fullname, my_username=my_username, my_mention=my_mention, totalwarns=totalwarns, warns=warns, remwarns=remwarns)
-    elif gvarstatus("pmmenu") is None:
-        USER_BOT_NO_WARN = f"""ههلا بيك {mention_user} \n مالك الحساب غير موجود حاليا الرجاء الانتظار وعدم تكرار الرسائل. 
-لديك {warns}/{totalwarns} من التحذيرات لا تكرر حتى ما تنحظر من البوت.
-اختر احد الخيارات في الاسفل وانتظر الى ان اصبح متصلا بالانترنت ليتم الرد عليك ⬇️⬇️"""
-    else:
-        USER_BOT_NO_WARN = f"""ههلا بيك {mention_user} \n مالك الحساب غير موجود حاليا الرجاء الانتظار وعدم تكرار الرسائل. 
-لديك {warns}/{totalwarns} من التحذيرات لا تكرر حتى ما تنحظر من البوت.
-لا تكرر اذكر سبب مجيئك فقط"""
-    addgvar("pmpermit_text", USER_BOT_NO_WARN)
-    PM_WARNS[str(chat.id)] += 1
-    try:
-        if gvarstatus("pmmenu") is None:
-            results = await event.client.inline_query(Config.TG_BOT_USERNAME, "pmpermit")
-            msg = await results[0].click(chat.id, reply_to=reply_to_id, hide_via=True)
-        else:
-            PM_PIC = gvarstatus("pmpermit_pic")
-            if PM_PIC:
-                CAT = [x for x in PM_PIC.split()]
-                PIC = list(CAT)
-                CAT_IMG = random.choice(PIC)
-            else:
-                CAT_IMG = None
-            if CAT_IMG is not None:
-                msg = await event.client.send_file(chat.id, CAT_IMG, caption=USER_BOT_NO_WARN, reply_to=reply_to_id)
-            else:
-                msg = await event.client.send_message(chat.id, USER_BOT_NO_WARN, reply_to=reply_to_id)
-    except Exception as e:
-        msg = await event.reply(USER_BOT_NO_WARN)
-    try:
-        if str(chat.id) in PMMESSAGE_CACHE:
-            await event.client.delete_messages(chat.id, PMMESSAGE_CACHE[str(chat.id)])
-            del PMMESSAGE_CACHE[str(chat.id)]
-    except Exception as e:
-        pass
-    PMMESSAGE_CACHE[str(chat.id)] = msg.id
-    sql.del_collection("pmwarns")
-    sql.del_collection("pmmessagecache")
-    sql.add_collection("pmwarns", PM_WARNS, {})
-    sql.add_collection("pmmessagecache", PMMESSAGE_CACHE, {})
-
-@jmthon.ar_cmd(incoming=True, func=lambda e: e.is_private, edited=False)
-async def on_new_private_message(event):
-    if gvarstatus("pmpermit") is None:
-        return
-    chat = await event.get_chat()
-    if chat.bot or chat.verified:
-        return
-    if pmpermit_sql.is_approved(chat.id):
-        return
-    if str(chat.id) in sqllist.get_collection_list("pmspam"):
-        return
-    if str(chat.id) in sqllist.get_collection_list("pmchat"):
-        return
-    if str(chat.id) in sqllist.get_collection_list("pmrequest"):
-        return
-    if str(chat.id) in sqllist.get_collection_list("pmenquire"):
-        return
-    if str(chat.id) in sqllist.get_collection_list("pmoptions"):
-        return
-    await do_pm_permit_action(event, chat)
-
-@jmthon.ar_cmd(pattern="الحماية (تشغيل|تعطيل)$")
-async def pmpermit_on(event):
-    input_str = event.pattern_match.group(1)
-    if input_str == "تشغيل":
-        if gvarstatus("pmpermit") is None:
-            addgvar("pmpermit", "true")
-            await edit_delete(event, "⌯︙تم تفعيل أمر الحماية لحسابك بنجاح ✅")
-        else:
-            await edit_delete(event, "⌯︙أمر الحماية بالفعل ممكن لحسابك 🌿")
-    elif gvarstatus("pmpermit") is not None:
-        delgvar("pmpermit")
-        await edit_delete(event, "⌯︙تم تعطيل أمر الحماية لحسابك بنجاح ✅")
-    else:
-        await edit_delete(event, "⌯︙أمر الحماية بالفعل معطل لحسابك 🌿")
-
-@jmthon.ar_cmd(pattern="(س|سماح)(?:\s|$)([\s\S]*)")
-async def approve_pm(event):
-    if gvarstatus("pmpermit") is None:
-        return await edit_delete(event, "⌯︙يجب تفعيل أمر الحماية أولاً بإرسال `.الحماية تشغيل`")
-    if event.is_private:
-        user = await event.get_chat()
-        reason = event.pattern_match.group(2)
-    else:
-        user, reason = await get_user_from_event(event, secondgroup=True)
-        if not user:
-            return
-    if not reason:
-        reason = "لم يذكر"
-    try:
-        PM_WARNS = sql.get_collection("pmwarns").json
-    except AttributeError:
-        PM_WARNS = {}
-    if not pmpermit_sql.is_approved(user.id):
-        if str(user.id) in PM_WARNS:
-            del PM_WARNS[str(user.id)]
-        start_date = str(datetime.now().strftime("%B %d, %Y"))
-        pmpermit_sql.approve(user.id, get_display_name(user), start_date, user.username, reason)
-        for list_name in ["pmspam", "pmchat", "pmrequest", "pmenquire", "pmoptions"]:
-            if str(user.id) in sqllist.get_collection_list(list_name):
-                sqllist.rm_from_list(list_name, user.id)
-        await edit_delete(event, f"⌯︙[{user.first_name}](tg://user?id={user.id})\n⌯︙تم السماح له بإرسال الرسائل \nالسبب: {reason}")
-        try:
-            PMMESSAGE_CACHE = sql.get_collection("pmmessagecache").json
-        except AttributeError:
-            PMMESSAGE_CACHE = {}
-        if str(user.id) in PMMESSAGE_CACHE:
-            try:
-                await event.client.delete_messages(user.id, PMMESSAGE_CACHE[str(user.id)])
-            except Exception:
-                pass
-            del PMMESSAGE_CACHE[str(user.id)]
-        sql.del_collection("pmwarns")
-        sql.del_collection("pmmessagecache")
-        sql.add_collection("pmwarns", PM_WARNS, {})
-        sql.add_collection("pmmessagecache", PMMESSAGE_CACHE, {})
-    else:
-        await edit_delete(event, f"[{user.first_name}](tg://user?id={user.id})\n⌯︙هو بالفعل في قائمة السماح")
-
-@jmthon.ar_cmd(pattern="(ر|رفض)(?:\s|$)([\s\S]*)")
-async def disapprove_pm(event):
-    if gvarstatus("pmpermit") is None:
-        return await edit_delete(event, "⌯︙يجب تفعيل أمر الحماية أولاً")
-    if event.is_private:
-        user = await event.get_chat()
-        reason = event.pattern_match.group(2)
-    else:
-        reason = event.pattern_match.group(2)
-        if reason != "الكل":
-            user, reason = await get_user_from_event(event, secondgroup=True)
-            if not user:
-                return
-    if reason == "الكل":
-        pmpermit_sql.disapprove_all()
-        return await edit_delete(event, "⌯︙حسنا تم رفض الجميع بنجاح 🧸♥")
-    if not reason:
-        reason = "لم يذكر"
-    if pmpermit_sql.is_approved(user.id):
-        pmpermit_sql.disapprove(user.id)
-        await edit_or_reply(event, f"[{user.first_name}](tg://user?id={user.id})\n⌯︙تم رفضه من إرسال الرسائل\nالسبب: {reason}")
-    else:
-        await edit_delete(event, f"[{user.first_name}](tg://user?id={user.id})\n⌯︙لم يتم الموافقة عليه بالأصل")
-
-@jmthon.ar_cmd(pattern="بلوك(?:\s|$)([\s\S]*)")
-async def block_pm(event):
-    if gvarstatus("pmpermit") is None:
-        return await edit_delete(event, "⌯︙يجب تفعيل أمر الحماية أولاً")
-    if event.is_private:
-        user = await event.get_chat()
-        reason = event.pattern_match.group(1)
-    else:
-        user, reason = await get_user_from_event(event)
-        if not user:
-            return
-    if not reason:
-        reason = "لم يتم ذكره"
-    try:
-        PM_WARNS = sql.get_collection("pmwarns").json
-    except AttributeError:
-        PM_WARNS = {}
-    try:
-        PMMESSAGE_CACHE = sql.get_collection("pmmessagecache").json
-    except AttributeError:
-        PMMESSAGE_CACHE = {}
-    if str(user.id) in PM_WARNS:
-        del PM_WARNS[str(user.id)]
-    if str(user.id) in PMMESSAGE_CACHE:
-        try:
-            await event.client.delete_messages(user.id, PMMESSAGE_CACHE[str(user.id)])
-        except Exception:
-            pass
-        del PMMESSAGE_CACHE[str(user.id)]
-    if pmpermit_sql.is_approved(user.id):
-        pmpermit_sql.disapprove(user.id)
-    sql.del_collection("pmwarns")
-    sql.del_collection("pmmessagecache")
-    sql.add_collection("pmwarns", PM_WARNS, {})
-    sql.add_collection("pmmessagecache", PMMESSAGE_CACHE, {})
-    await event.client(BlockRequest(user.id))
-    await edit_delete(event, f"[{user.first_name}](tg://user?id={user.id})\n تم حظره بنجاح لا يمكنه مراسلتك بعد الآن 🧸♥\nالسبب: {reason}")
-
-@jmthon.ar_cmd(pattern="انبلوك(?:\s|$)([\s\S]*)")
-async def unblock_pm(event):
-    if gvarstatus("pmpermit") is None:
-        return await edit_delete(event, "⌯︙يجب تفعيل أمر الحماية أولاً")
-    if event.is_private:
-        user = await event.get_chat()
-        reason = event.pattern_match.group(1)
-    else:
-        user, reason = await get_user_from_event(event)
-        if not user:
-            return
-    if not reason:
-        reason = "لم يتم ذكر السبب"
-    await event.client(UnblockRequest(user.id))
-    await event.edit(f"[{user.first_name}](tg://user?id={user.id})\nتم الغاء حظره بنجاح يمكنه التكلم معك الآن 🧸♥\nالسبب: {reason}")
-
-@jmthon.ar_cmd(pattern="المسموح لهم$")
-async def list_approved(event):
-    if gvarstatus("pmpermit") is None:
-        return await edit_delete(event, "⌯︙يجب تفعيل أمر الحماية أولاً")
-    approved_users = pmpermit_sql.get_all_approved()
-    APPROVED_PMs = "⌯︙قائمة المسموح لهم الحالية\n\n"
-    if len(approved_users) > 0:
-        for user in approved_users:
-            APPROVED_PMs += f"• 👤 {mention(user)}\n⌯︙الأيدي: `{user.user_id}`\n⌯︙المعرف: @{user.username}\n⌯︙التاريخ: {user.date}\n⌯︙السبب: {user.reason}\n\n"
-    else:
-        APPROVED_PMs = "انت لم توافق على أي شخص بالأصل 🧸♥️"
-    await edit_or_reply(event, APPROVED_PMs, caption="قائمة المسموح لهم الحالية\n سورس عبود \n @SSSTlF")
-
-# =====================================================================
-#                        أَمْرُ النَّوْمِ (AFK)
-# =====================================================================
-
-class AFK:
-    def __init__(self):
-        self.USERAFK_ON = {}
-        self.afk_time = None
-        self.last_afk_message = {}
-        self.afk_star = {}
-        self.afk_end = {}
-        self.reason = None
-        self.msg_link = False
-        self.afk_type = None
-        self.media_afk = None
-        self.afk_on = False
-
-AFK_ = AFK()
-
-@jmthon.ar_cmd(outgoing=True, edited=False)
-async def set_not_afk(event):
-    if AFK_.afk_on is False:
-        return
-    back_alive = datetime.now()
-    AFK_.afk_end = back_alive.replace(microsecond=0)
-    if AFK_.afk_star != {}:
-        total_afk_time = AFK_.afk_end - AFK_.afk_star
-        time_seconds = int(total_afk_time.seconds)
-        d = time_seconds // (24 * 3600)
-        time_seconds %= 24 * 3600
-        h = time_seconds // 3600
-        time_seconds %= 3600
-        m = time_seconds // 60
-        time_seconds %= 60
-        s = time_seconds
-        endtime = ""
-        if d > 0:
-            endtime += f"{d} الأيام {h} الساعات {m} الدقائق {s} الثواني"
-        elif h > 0:
-            endtime += f"{h} الساعات {m} الدقائق {s} الثواني"
-        else:
-            endtime += f"{m} الدقائق {s} الثواني" if m > 0 else f"{s} الثواني"
-    current_message = event.message.message
-    if (("afk" not in current_message) or ("#afk" not in current_message)) and ("on" in AFK_.USERAFK_ON):
-        shite = await event.client.send_message(event.chat_id, "⌯︙**تم تعطيل أمر النوم والرجوع إلى الوضع الطبيعي**")
-        AFK_.USERAFK_ON = {}
-        AFK_.afk_time = None
-        await asyncio.sleep(5)
-        await shite.delete()
-        AFK_.afk_on = False
-        if BOTLOG:
-            await event.client.send_message(BOTLOG_CHATID, f"⌯︙انتهاء أمر النوم\n⌯︙تم تعطيله والرجوع للوضع الطبيعي كان مفعل لـ {endtime}")
-
-@jmthon.ar_cmd(incoming=True, func=lambda e: bool(e.mentioned or e.is_private), edited=False)
-async def on_afk(event):
-    if AFK_.afk_on is False:
-        return
-    back_alivee = datetime.now()
-    AFK_.afk_end = back_alivee.replace(microsecond=0)
-    if AFK_.afk_star != {}:
-        total_afk_time = AFK_.afk_end - AFK_.afk_star
-        time_seconds = int(total_afk_time.seconds)
-        d = time_seconds // (24 * 3600)
-        time_seconds %= 24 * 3600
-        h = time_seconds // 3600
-        time_seconds %= 3600
-        m = time_seconds // 60
-        time_seconds %= 60
-        s = time_seconds
-        endtime = ""
-        if d > 0:
-            endtime += f"{d} الأيام {h} الساعات {m} الدقائق {s} الثواني"
-        elif h > 0:
-            endtime += f"{h} الساعات {m} الدقائق {s} الثواني"
-        else:
-            endtime += f"{m} الدقائق {s} الثواني" if m > 0 else f"{s} الثواني"
-    current_message_text = event.message.message.lower()
-    if "afk" in current_message_text or "#afk" in current_message_text:
-        return False
-    if not await event.get_sender():
-        return
-    if AFK_.USERAFK_ON and not (await event.get_sender()).bot:
-        msg = None
-        if AFK_.afk_type == "media":
-            message_to_reply = f"- **عمري أني هسة نايم** \n- **مدة النوم:** {endtime}"
-            if event.chat_id:
-                msg = await event.reply(message_to_reply, file=AFK_.media_afk.media)
-        elif AFK_.afk_type == "text":
-            message_to_reply = f"- **عمري أني هسة نايم** \n- **مدة النوم:** {endtime}"
-            if event.chat_id:
-                msg = await event.reply(message_to_reply)
-        if event.chat_id in AFK_.last_afk_message:
-            await AFK_.last_afk_message[event.chat_id].delete()
-        AFK_.last_afk_message[event.chat_id] = msg
-
-@jmthon.ar_cmd(pattern="نوم(?:\s|$)([\s\S]*)")
-async def set_afk_media(event):
-    reply = await event.get_reply_message()
-    media_t = media_type(reply)
-    if media_t == "Sticker" or not media_t:
-        return await edit_or_reply(event, "⌯︙أمر النوم: المرجو قم بالرد على الصورة بالأمر")
-    if not BOTLOG:
-        return await edit_or_reply(event, "⌯︙لاستخدام هذا الأمر يجب إضافة متغير PRIVATE_GROUP_BOT_API_ID")
-    AFK_.USERAFK_ON = {}
-    AFK_.afk_time = None
-    AFK_.last_afk_message = {}
-    AFK_.afk_end = {}
-    AFK_.media_afk = None
-    AFK_.afk_type = "media"
-    start_1 = datetime.now()
-    AFK_.afk_on = True
-    AFK_.afk_star = start_1.replace(microsecond=0)
-    if not AFK_.USERAFK_ON:
-        input_str = event.pattern_match.group(1)
-        AFK_.reason = input_str
-        last_seen_status = await event.client(GetPrivacyRequest(types.InputPrivacyKeyStatusTimestamp()))
-        if isinstance(last_seen_status.rules, types.PrivacyValueAllowAll):
-            AFK_.afk_time = datetime.now()
-        AFK_.USERAFK_ON = f"on: {AFK_.reason}"
-        await edit_delete(event, "⌯︙انا الان في وضعية النوم يرجى المراسلة لاحقاً", 5)
-        AFK_.media_afk = await reply.forward_to(BOTLOG_CHATID)
-        await event.client.send_message(BOTLOG_CHATID, f"**⌯︙أمر النوم 💤:**\n**تم تشغيل الأمر ❕**")
-
-# =====================================================================
-#                        جَمِيعُ أَوَامِرِ الشَّرْحِ
-# =====================================================================
-
-@jmthon.ar_cmd(pattern="اوامر الحظر$")
-async def ban_commands(event):
-    await event.edit(
-        "شرح عن أوامر الحظر \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n( `.حظر` ) \n- تقوم بالرد على شخص او وضع معرفه مع الامر وسيحظره من المجموعة\n\n( `.الغاء حظر` )\n- بالرد على الشخص او كتابة معرفه مع الامر لالغاء حظره\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الكتم$")
-async def mute_commands(event):
-    await event.edit(
-        "شرح عن أوامر الكتم \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n( `.كتم` ) \n- تقوم بالرد على شخص او وضع معرفه مع الامر وسيكتمه من المجموعة\n\n( `.الغاء كتم` )\n- بالرد على الشخص او كتابة معرفه مع الامر لالغاء كتمه\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التثبيت$")
-async def pin_commands(event):
-    await event.edit(
-        "شرح عن أوامر التثبيت \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n( `.تثبيت` ) \n- تقوم بالرد على الرسالة مع الامر وستثبت في المجموعة\n\n( `.الغاء التثبيت` )\n- بالرد على الرسالة مع الامر لإلغاء تثبيتها\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الاشراف$")
-async def admin_commands(event):
-    await event.edit(
-        "شرح عن أوامر الاشراف \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n( `.رفع مشرف` ) \n- تقوم بالرد على الشخص مع الامر و سيرفع مشرفا في المجموعة\n\n( `.تنزيل مشرف` )\n- بالرد على الشخص مع الامر لإنزاله من الاشراف في المجموعة\n\n( `.اخفاء` ) \n- لرفع المستخدم في جميع المجموعات مع كافة الصلاحيات مع لقب مخفي\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التفليش$")
-async def flush_commands(event):
-    await event.edit(
-        "شرح عن أوامر التفليش \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.تفليش` ) \n ارسل الامر لحظر جميع الاعضاء من المجموعه\n\n- ( `.تصفير` ) \n كتابة الامر فقط في المجموعه لطرد جميع الاعضاء\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر المحذوفين$")
-async def deleted_commands(event):
-    await event.edit(
-        "شرح عن أوامر المحذوفين \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.مسح المحظورين` ) \n كتابة الامر في الكروب لالغاء حظر جميع الاعضاء \n\n- ( `.غادر` ) \n فقط ارسل الامر في المجموعة لمغادرة المجموعه التي تم ارسال الامر فيها\n\n- ( `.المحذوفين` ) \n لعرض الحسابات المحذوفة في مجموعة معينة ولحذفهم ارسل .المحذوفين تنظيف\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الكروب$")
-async def group_commands(event):
-    await event.edit(
-        "شرح عن أوامر الكروب \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.الاحداث` ) \n كتابة الامر في الكروب لعرض احداث الكروب\n\n- ( `.الاعضاء` ) \n فقط ارسل الامر في المجموعة لعرض اعضاء المجموعة\n\n- ( `.المشرفين` ) \n ارسل الامر في المجموعه لعرض حسابات المشرفين\n\n- ( `.البوتات` )\n ارسل الامر في المجموعه لعرض البوتات\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الترحيب$")
-async def welcome_commands(event):
-    await event.edit(
-        "شرح عن أوامر الترحيب \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.ترحيب + ترحيبك` )\n اكتب الامر مع ترحيب في المجموعه ليرحب بالاعضاء الجدد\n\n- ( `.حذف الترحيبات` ) \n فقط ارسل الامر في المجموعة لحذف الترحيبات\n\n- ( `.الترحيبات` )\n ارسل الامر في المجموعه لعرض ترحيبات المجموعة\n\n- ( `.الترحيب السابق ايقاف/تشغيل` )\n لتعطيل اخر ترحيب وضعته في المجموعة او تشغيل\n\n- ( `.رحب + ترحيبك` )\n لوضع ترحيب في عند دخول الاعضاء للمجموعة سوف يرحب بهم في الخاص\n\n- ( `.حذف رحب` )\n لحذف الترحيب في الخاص\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الردود$")
-async def reply_commands(event):
-    await event.edit(
-        "شرح عن أوامر الردود \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.اضف رد + ردك` ) \n لوضع رد معين في المجموعة اكتب الامر وردك\n\n- ( `.حذف الردود` ) \n فقط ارسل الامر في المجموعة لحذف الردود المضافة\n\n- ( `.الردود` ) \n ارسل الامر في المجموعه لعرض ردود المجموعة\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الحماية$")
-async def pm_commands(event):
-    await event.edit(
-        "شرح عن أوامر الخاص \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.الحماية تشغيل/تعطيل` ) \n لتشغيل امر الحمايه او تعطيله في الخاص \n\n- ( `.سماح` ) \n بالرد على الشخص للسماح له بالتكلم في الخاص\n\n- ( `.رفض` ) \n بالرد على الشخص لرفضه من الخاص \n\n- ( `.المسموح لهم` )\n فقط ارسل الامر لاظهار الاشخاص المسموح لهم والمرفوضين\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التلكراف$")
-async def telegraph_commands(event):
-    await event.edit(
-        "شرح عن أوامر التلكراف \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.تلكراف ميديا` ) \n لاستخراج رابط من الصورة على شكل رابط تلكراف\n\n- ( `.تلكراف نص` ) \n بالرد على النص او المقالة لصنع رابط تلكراف للنص\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الانتحال$")
-async def clone_commands(event):
-    await event.edit(
-        "شرح عن أوامر الانتحال \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.انتحال` ) \n بالرد على الشخص لنسخ حسابه بالكامل من صورة واسم وبايو\n\n- ( `.اعادة` ) \n لارجاع الحساب الى وضعه الطبيعي لما كان سابقا\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التقليد$")
-async def mimic_commands(event):
-    await event.edit(
-        "شرح عن أوامر التقليد \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.تقليد` ) \n بالرد على الشخص لتقليد جميع رسائله في الدردشه\n\n- ( `.الغاء التقليد` ) \n بالرد على الشخص لايقاف التقليد\n\n- ( `.المقلدهم` )\nلاظهار قائمه الاشخاص الذي فعلت عليهم امر التقليد ولمسحهم ارسل (`.مسح المقلدهم`)\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر المنشن$")
-async def mention_commands(event):
-    await event.edit(
-        "شرح عن أوامر المنشن \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.تاك + معرف + نص` ) \n لعمل تاك لشخص في الكروب و وضع التاك في النص \n- مثال | .تاك @SSSTlF ههلا\n\n- ( `.للكل + نص` ) \n لعمل تاك للكل مع النص اكتب الامر مع النص وارسله فقط\n\n- ( `.ابلاغ` )\n بالرد على الشخص لعمل ابلاغ لمشرفين المجموعة\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التحميل$")
-async def download_commands(event):
-    await event.edit(
-        "شرح عن أمر التحميل\n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر\n\n- (`.بحث + اسم الاغنية`)\nبكتابة اسم الاغنية مع الامر لارسال الاغنيه مباشرا واذا ما اشتغل جرب اوامر التحميل الاخرى\n- مثال : `.بحث ماهر زين`\n\n- (`.يوت + اسم الفيديو او الاغنية`)\nكتابة الامر مع اسم الفيديو او الاغنية ليعطيك نتائج البحث وروابط من يوتيوب تستخدم مع اوامر التحميل\n- مثال : `.يوت ماهر زين`\n\n- (`.تحميل ص + رابط الاغنية`)\nلتحميل اغنيه من خلال وضع الرابط مع الامر\n- مثال : `.تحميل ص https://youtube.com/...`\n\n- (`.تحميل ف + رابط الفيديو`)\nكتابة الامر مع رابط المقطع لتحميله وارساله\n- مثال : `.تحميل ف https://youtube.com/...`\n\n- (`.انستا + الرابط `)\nيستخدم هذا الامر لتحميل من الانستا فقط اكتب الامر مع رابط الفيديو ليحمله\n- مثال : `.انستا https://instagram.com/jdisjejjd...`\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الترجمة$")
-async def translate_commands(event):
-    await event.edit(
-        "شرح عن أوامر الترجمة \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.ترجمة ar` ) \n بالرد على النص لترجمته للغه العربية\n\n- ( `.ترجمة en` ) \n بالرد على النص لترجمته للغه الانكليزية\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر النطق$")
-async def speech_commands(event):
-    await event.edit(
-        "شرح عن أوامر النطق \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.تكلم ar` ) \n بالرد على النص لتحويله الى مقطع صوتي للغة العربيه\n\n- ( `.تكلم en` ) \n بالرد على النص لتحوليه الى مقطع صوتي للغه الانكليزية\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر القفل$")
-async def lock_commands(event):
-    await event.edit(
-        "شرح عن أوامر القفل \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.قفل + الاضافة` ) \n تكتب الامر مع الاضافة لقفل شي معين في المجموعة \n\nالاضافات : \n - الدردشه : لقفل ارسال الرسائل \n- الوسائط : لقفل ارسال الوسائط\n- الملصقات : لقفل ارسال الملصقات\n- الروابط : لقفل ارسال الروابط\n- المتحركه : لقفل ارسال المتحركه\n- الالعاب : لقفل ارسال الالعاب الانلاين\n- الانلاين : لقفل ارسال البوتات الانلاين\n- التصويت : لقفل ارسال التوصيتات\n- الكل : لقفل ارسال كل شي\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الفتح$")
-async def unlock_commands(event):
-    await event.edit(
-        "شرح عن أوامر الفتح \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.فتح + الاضافة` ) \n تكتب الامر مع الاضافة لفتح شي معين في المجموعة \n\nالاضافات : \n - الدردشه : لفتح ارسال الرسائل\n- الوسائط : لفتح ارسال الوسائط\n- الملصقات : لفتح ارسال الملصقات\n- الروابط : لفتح ارسال الروابط\n- المتحركه : لفتح ارسال المتحركه\n- الالعاب : لفتح ارسال الالعاب الانلاين\n- الانلاين : لفتح ارسال البوتات الانلاين\n- التصويت : لفتح ارسال التوصيتات\n- الكل : لفتح ارسال كل شي\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر المنع$")
-async def blockword_commands(event):
-    await event.edit(
-        "شرح عن أوامر المنع \n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر \n\n- ( `.منع + الكلمة` ) \n لمنع الكلمة في الدردشة وسيتم حذفها عند ارسالها من اي شخص\n\n- ( `.الغاء منع + الكلمة` ) \n لالغاء منع الكلمة والسماح للجميع بأرسالها في الدردشة\n\n- ( `.قائمة المنع` ) \nلاظهار قائمه الكلمات التي منعتها في الدردشه\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="تسلية 1$")
-async def fun1_commands(event):
-    await event.edit(
-        "قائمة اوامر التسلية 1 :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n- ( `.غبي` )\n- ( `.القنابل` )\n- ( `.اتصل` )\n- ( `.قتل` )\n- ( `.شنو` )\n- ( `.طوبة` )\n- ( `.مربعات` )\n- ( `.حلويات` )\n- ( `.نار` )\n- ( `.شحن` )\n\nتحذير : لا تكثر من استخدام هذه الاوامر لانها قد تسبب ضغط على حسابك او تعليقه من ارسال الرسائل لفترة وجيزة.\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="تسلية 2$")
-async def fun2_commands(event):
-    await event.edit(
-        "قائمة اوامر التسلية 2 :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n- ( `.افكر` )\n- ( `.متت` )\n- ( `.ضايج` )\n- ( `.ساعه` )\n- ( `.مح` )\n- ( `.قلب` )\n- ( `.جيم` )\n- ( `.الارض` )\n- ( `.قمر` )\n- ( `.اقمار` )\n- ( `.قمور` )\n\nتحذير : لا تكثر من استخدام هذه الاوامر لانها قد تسبب ضغط على حسابك او تعليقه من ارسال الرسائل لفترة وجيزة.\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="تسلية 3$")
-async def fun3_commands(event):
-    await event.edit(
-        "قائمة اوامر التسلية 3 :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n- ( `.نجمه` )\n- ( `.مكعبات` )\n- ( `.مطر` )\n- ( `.تفريغ` )\n- ( `.فليم` )\n- ( `.احبك` )\n- ( `.طائره` )\n- ( `.شرطه` )\n- ( `.النضام الشمسي` )\n\nتحذير : لا تكثر من استخدام هذه الاوامر لانها قد تسبب ضغط على حسابك او تعليقه من ارسال الرسائل لفترة وجيزة.\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="تسلية 4$")
-async def fun4_commands(event):
-    await event.edit(
-        "قائمة اوامر التسلية 4 :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n- ( `.قاتل` )\n- ( `.عين` )\n- ( `.افكرر` )\n- ( `.افعى` )\n- ( `.رجل` )\n- ( `.مايكرو` )\n- ( `.فايروس` )\n- ( `.قطار` )\n- ( `.نيكول` )\n- ( `.موسيقى` )\n- ( `.رسم` )\n\nتحذير : لا تكثر من استخدام هذه الاوامر لانها قد تسبب ضغط على حسابك او تعليقه من ارسال الرسائل لفترة وجيزة.\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="تسلية 5$")
-async def fun5_commands(event):
-    await event.edit(
-        "قائمة اوامر التسلية 5 :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n- ( `.تحميل` )\n- ( `.مربع` )\n- ( `.دائره` )\n- ( `.انيم` )\n- ( `.بشره` )\n- ( `.قرد` )\n- ( `.يد` )\n- ( `.العد التنازلي` )\n- ( `.قلوب` )\n\nتحذير : لا تكثر من استخدام هذه الاوامر لانها قد تسبب ضغط على حسابك او تعليقه من ارسال الرسائل لفترة وجيزة.\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="تسلية 6$")
-async def fun6_commands(event):
-    await event.edit(
-        "قائمة اوامر التسلية 6 :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n- ( `.ترامب` + النص )\n- ( `.مودي` + النص )\n- ( `.بنر` + النص )\n- ( `.كانا` + النص )\n- ( `.تويت` + المعرف ; النص )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="تسلية 7$")
-async def fun7_commands(event):
-    await event.edit(
-        "قائمة اوامر التسلية 7 :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n- ( `.تراش` بالرد على ملصق/صورة )\n- ( `.تهديد` بالرد على ملصق/صورة )\n- ( `.فخ` بالرد على ملصق/صورة + الاسم1 ; الاسم2 )\n- ( `.بورن` بالرد على ملصق/صورة + المعرف ; النص )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="تسلية 8$")
-async def fun8_commands(event):
-    await event.edit(
-        "قائمة اوامر التسلية 8 :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n- ( `.نص` + النص )\n- ( `.ستيكر` + النص )\n- ( `.هونك` + النص )\n- ( `.تغريد` + النص )\n- ( `.غلاكس` + النص )\n- ( `.دوغي` + النص )\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الملصقات$")
-async def sticker_commands(event):
-    await event.edit(
-        "شرح عن أوامر الملصقات\n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر\n\n- ( `.ملصق` )\nبالرد على الملصق لأخذه و عمل حزمه خاصة بك و اضافته بها\n\n- ( `.حزمة` )\nبالرد على الملصق لنسخ الحزمة كاملة بداخل حزمة ملصقاتك الخاصة\n\n- (`.معلومات_الملصق` )\nبالرد على الملصق لعرض معلومات الحزمة\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التكرار$")
-async def repeat_commands(event):
-    await event.edit(
-        "شرح عن أوامر التكرار\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.كرر + عدد التكرار + بالرد على الرسالة` )\n يقوم بتكرار النصوص والوسائط بالرد على الرسالة او الصورة \nمثال : ( بالرد على صورة `.كرر 10` )\n\n- ( `.تكرار الملصق + بالرد على ملصق` )\n بالرد على الملصق ليقوم باستخراج جميع ملصقات الحزمه وارسالها\n\n- (`.مكرر + وقت بالثواني + عدد + بالرد` )\n بالرد على نص او صورة او اي شي يقوم بالتكرار مع وقت معين .\nمثال : بالرد على نص ( `.مكرر 10 2` ) عندها سترسل 10 رسائل نصية ( النص الي رديت عليه ) بفاصل ثانيتين بين كل رسالة\n\n- ( `.ضع تكرار` + العدد )\nلمنع التكرار بالمجموعة الخاصة بك بالعدد الذي وضعته للعودة للوضع الطبيعي ضع 999999.\nمثال : ( `.ضع تكرار 10` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر السبام$")
-async def spam_commands(event):
-    await event.edit(
-        "شرح عن أوامر السبام\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.سبام + كلمة` )\nيقوم بتفصيخ احرف الكلمه وارسالها جربه بنفسك\n\n- ( `.وسبام + كلمة` )\nكتابة الامر مع نص معين يقوم بتفصيخ الجمله كلمه كلمه وارسالها\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التنظيف$")
-async def clean_commands(event):
-    await event.edit(
-        "شرح عن أوامر التنظيف\n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر\n\n- ( `.تنظيف + عدد الرسائل` )\nيقوم بحذف الرسائل اكتب الامر وعدد معين من الرسائل سيقوم بحذفها\n\n- ( `.تنظيف + الاضافة` )\n يجب وضع الشارحة مع الاضافة (-)\nمثال : ( `.تنظيف -ح` ) <سيقوم بحذف المتحركات في الدردشة>\nالاضافات : \n (-ب) : لحذف الرسائل الصوتية\n (-م): لحذف الملفات\n (-ح): لحذف المتحركة\n (-ص): لحذف الصور\n (-غ): لحذف الاغاني\n (-ق): لحذف الملصقات\n (-ر): لحذف الروابط\n (-ف): لحذف الفيديوهات\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر المسح$")
-async def delete_commands(event):
-    await event.edit(
-        "شرح عن أوامر المسح\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.مسح + بالرد على النص` )\nفقط اكتب الامر بالرد على الرسالة ليقوم بحذفها\n\n- ( `.حذف رسائلي` )\nاكتب الامر في اي مكان وسيقوم بحذف جميع رسائلك في الدردشه حتى لو لم يكن لديك صلاحيات\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الوقت والتاريخ$")
-async def time_commands(event):
-    await event.edit(
-        "شرح اوامر الوقت والتاريخ :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.تاريخ` )\nبالرد على الشخص او كتابة معرفه مع الامر لعرض سجل اسماء حسابه.\n\n- ( `.الوقت` )\nلعرض الوقت على شكل ملصق\n\n- ( `.وقت` )\nلعرض الوقت على شكل كتابة\n\n- ( `.مؤقت` + الوقت + النص )\nيقوم بإرسال رسالة مؤقتة و حذفها بعد وقت معين\n- مثال : `.مؤقت 5 سورس عبود`\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر كورونا$")
-async def corona_commands(event):
-    await event.edit(
-        "شرح اوامر كورونا :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر\n\n- ( `.كورونا` + الدولة )\nللحصول على احصائيات فايروس كورونا\n- مثال : `.كورونا Morocco`\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الصلاة$")
-async def prayer_commands(event):
-    await event.edit(
-        "شرح اوامر الصلاة :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.صلاة` )\nاكتب الامر مع اسم محافظتك باللغه الانكليزية للحصول على اوقات الصلاة\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر مساعدة$")
-async def help_commands(event):
-    await event.edit(
-        "شرح اوامر المساعدة :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.موقع` + المكان )\nللحصول على مكان في الخريطه و ارساله لك\n\n- ( `.صورة` )\nبالرد على الشخص للحصول على صورة حسابه الشخصية.\n\n- ( `.صوره كلها` )\nللرد على الشخص للحصول على صور حسابه الشخصية كلها.\n\n- ( `.سرعة الانترنت` )\nارسل الامر لقياس سرعة الانترنت\n\n- ( `.حساب` )\nكتابة الامر مع معادلة رياضية و سيقوم بحلها و ارسالها لك\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="فارغ $")
-async def empty_commands(event):
-    await event.edit(
-        "شرح اوامر :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.معلومات` )\nارسل الامر في المجموعة لرؤية معلومات المجموعة او اكتب الامر مع معرف المجموعة\n\n- ( `.البوتات` )\nارسل الامر في المجموعة لرؤية البوتات الموجودة في المجموعة او اكتب الامر مع معرف المجموعة\n\n- ( `.المشرفين` )\nارسل الامر في المجموعة لرؤية مشرفين المجموعة او اكتب الامر مع معرف المجموعة\n\n- ( `.الاعضاء` )\nارسل الامر في المجموعة لرؤية اعضاء المجموعة او اكتب الامر مع معرف المجموعة\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الروابط$")
-async def link_commands(event):
-    await event.edit(
-        "شرح اوامر الروابط :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.دنس` + الرابط )\nلكشف نظام دومين موقع معين اكتب الامر مع الرابط\n\n- ( `.مصغر` )\nبالرد على الرابط او وضع الرابط مع الامر ليقوم بتصغيره\n\n- ( `.رابط_مخفي` )\nبالرد على الرابط لاخفاء الرابط و جعله في مسافه معينة جرب الامر بنفسك\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التحذيرات$")
-async def warn_commands(event):
-    await event.edit(
-        "شرح اوامر التحذيرات :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.تحذير + السبب` )\nبالرد على الشخص ليقوم بتحذيره يمكنك وضع سبب كذلك\n\n- ( `.التحذيرات` )\nبالرد على الشخص ليقوم باظهار تحذيراته.\n\n- ( `.حذف التحذيرات` )\nبالرد على الشخص لحذف تحذيراته.\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر اللستة$")
-async def list_commands(event):
-    await event.edit(
-        "شرح اوامر اللستة :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.لستة` )\nيقوم بصنع لستة شفافة لمنشور معين\nشرح الامر : \n https://t.me/SSSTlF\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الملكية$")
-async def ownership_commands(event):
-    await event.edit(
-        "شرح اوامر الملكية :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.ملكية` )\nيقوم بكتابة التمر في القناة التي تريد تحويلها لشخص و بكتابة الامر مع معرف الشخص\n\nلاستخدام امر نقل الملكية تحتاج لوضع TG_2STEP_VERIFICATION_CODE و معه رمز حسابك في الفارات\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر السليب$")
-async def sleep_commands(event):
-    await event.edit(
-        "شرح اوامر السليب :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.سليب` + السبب)\nيقوم بادخالك في وضع غير المتصل يقوم بالرد على اي شخص برسالة يقول فيها انك غير متواجد.\n- مثال : `.سليب نايم`\n\n- ( `.سليب_ميديا` + السبب )\nيقوم بنفس وظيفة الامر العادي غير انه يمكنك ارفاق صورة او متحركة بالرد عليها مع الامر.\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الاسم$")
-async def name_commands(event):
-    await event.edit(
-        "شرح اوامر الاسم الوقتي :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.اسم وقتي` )\nبكتابة الامر لاضافة اسم وقتي حسب منطقة التي وضعتها .\n\n- ( `.ايقاف اسم وقتي` )\nلانهاء الاسم الوقتي و ارجاع الاسم الطبيعي .\n\n- ( `.صوره وقتيه` )\nلوضع صورة تتغير مع الوقت\n\n- ( `.ايقاف صوره وقتيه` )\nلانهاء الصورة واسترجاع الصورة الاصلية\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر البايو$")
-async def bio_commands(event):
-    await event.edit(
-        "شرح اوامر البايو الوقتي :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.بايو وقتي` )\nبكتابة الامر لاضافة بايو وقتي حسب منطقة التي وضعتها .\n\n- ( `.ايقاف بايو وقتي` )\nلانهاء البايو الوقتي و ارجاع البايو الطبيعي .\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التشغيل$")
-async def run_commands(event):
-    await event.edit(
-        "شرح اوامر التشغيل :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.اعادة تشغيل` )\nلاعادة تشغيل البوت و ارجاعة الى شكله الطبيعي كما كان في الاول فقط ارسل الامر .\n\n- ( `.تحديث` )\nفقط ارسل الامر للتاكد اذا كان هناك تحديثات من مطورين السورس .\n\n- ( `.التحديثات تشغيل` )\nيستخدم هذا الامر لارسال رسالة تجريبية تلقائية لرؤية البوت اذا ما كان شغال بعد اعادة التشغيل او التحديث سيرس امر `.بنك` ولايقافه ارسل `.التحديثات ايقاف` .\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الاطفاء$")
-async def shutdown_commands(event):
-    await event.edit(
-        "شرح اوامر الاطفاء :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.اطفاء` )\nلالغاء تشغيل البوت و يجب اعادة تشغيله من هيروكو .\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الكشف$")
-async def info_commands(event):
-    await event.edit(
-        "شرح اوامر الكشف :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.ايدي` )\nبالرد على الشخص او كتابة معرفه مع الامر لعرض معلوماته.\n\n- ( `.ايدي` )\nبالرد على الشخص لعرض معلوماته\n\n- ( `.كشف` )\nبالرد على الشخص لعرض معلوماته بشكل مبسط\n\n- ( `.رابط الحساب` )\nبالرد على الشخص للحصول على رابط حساب الشخص\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر كوكل$")
-async def google_commands(event):
-    await event.edit(
-        "شرح اوامر كوكل :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.صور + عدد الصور + نص` )\nللحصول على صور من متصفح كوكل بكتابة الامر وعدد الصور الحد 10 واسم النص\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الاذاعه$")
-async def broadcast_commands(event):
-    await event.edit(
-        "شرح اوامر التوجيه والاذاعة :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.وجه + نص` )\nلعمل اذاعة للنص في المجموعات اكتب الامر ونصك\n\n- ( `.حول + نص` )\nلعمل اذاعة للنص للدردشات الخاصة اكتب الامر ونصك\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="امر الصورة الذاتية$")
-async def selfpic_commands(event):
-    await event.edit(
-        "شرح امر الصورة الذاتية :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.ذاتيه` )\n بالرد على الصورة الذاتية التدمير ليقوم بحفظها وارسالها لك في الرسائل المحفوظة بسرية وبدون علم الطرف الآخر\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التسلية$")
-async def all_fun_commands(event):
-    await event.edit(
-        "قائمة اوامر التسلية :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n- ( `.تسلية 1` )\n- ( `.تسلية 2` )\n- ( `.تسلية 3` )\n- ( `.تسلية 4` )\n- ( `.تسلية 5` )\n- ( `.تسلية 6` )\n- ( `.تسلية 7` )\n- ( `.تسلية 8` )\n- ( `.فيك typing 300` )\n- ( `.رفع ادمن` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التحشيش$")
-async def joke_commands(event):
-    await event.edit(
-        "قائمة اوامر التحشيش :\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه القوائم\n\n**جميع اوامر التحشيش تستخدم بالرد على الشخص**\n\n- ( `.رفع تاج` )\n- ( `.رفع بكلبي` )\n- ( `.رفع مطي` )\n- ( `.رفع جلب` )\n- ( `.رفع قرد` )\n- ( `.رفع مرتي` )\n- ( `.رفع زوجي` )\n- ( `.نسبة الانوثة` )\n- ( `.نسبة الحب` )\n- ( `.نسبة الغباء` )\n- ( `.رفع زاحف` )\n- ( `.رفع كحبة` )\n- ( `.رفع فرخ` )\n- ( `.رزله` )\n- ( `.رفع صاك` )\n- ( `.رفع حاته` )\n- ( `.رفع بقره` )\n- ( `.رفع ايجة` )\n- ( `.رفع زبال` )\n- ( `.رفع كواد` )\n- ( `.رفع ديوث` )\n- ( `.رفع مجنب` )\n- ( `.رفع مميز` )\n- ( `.رفع ادمن` )\n- ( `.رفع منشئ` )\n- ( `.رفع مالك` )\n- ( `.رفع وصخ` )\n- ( `.نسبة الكذب` )\n- ( `.نسبة الدياثه` )\n- ( `.نسبة الشذوذ` )\n- ( `.نسبة الجمال` )\n- ( `.نسبة الخيانه` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر التحويل$")
-async def convert_commands(event):
-    await event.edit(
-        "شرح عن أوامر تحويل الصيغ :\n➖➖➖➖➖➖➖➖➖➖➖➖\n ⌯︙اختر احدى هذه الاوامر\n\n- ( `.تحويل صورة` )\n بالرد على الملصق لتحويله الى صورة\n\n- ( `.تحويل ملصق` )\n بالرد على الصورة لتحويلها الى الملصق\n\n- ( `.تحويل voice` )\nبالرد على مقطع اغنية لتحويله على شكل بصمة صوتية\n\n- ( `.تحويل mp3` )\nبالرد على البصمة الصوتية لتحويلها على شكل مقطع mp3\n\n➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الجهات$")
-async def add_commands(event):
-    await event.edit(
-        "قائمة اوامر الجهات والاضافة\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.ضيف + رابط مجموعة` )\n يستخدم الامر لاخذ اعضاء من مجموعة ثانية واضافتهم في مجموعتك ترسل الامر مع رابط قروب عام في مجموعتك للاضافة\n مثال : .ضيف https://t.me/SSSTlF\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الحساب$")
-async def account_commands(event):
-    await event.edit(
-        "قائمة اوامر الحساب والقنوات والمجموعات التي تديرها\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.معلوماتي` )\n- ( `.قائمه قنواتي` )\n- ( `.قائمه كروباتي` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الالعاب$")
-async def game_commands(event):
-    await event.edit(
-        "قائمة اوامر الالعاب\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.بلي` )\n- ( `.كت` )\n- ( `.خيروك` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="بصمات ميمز$")
-async def meme1_commands(event):
-    await event.edit(
-        "قائمة بصمات الميمز\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.تخوني` )\n- ( `.مستمرة الكلاوات` )\n- ( `.احب العراق` )\n- ( `.احبك` )\n- ( `.اخت التنيج` )\n- ( `.اذا اكمشك` )\n- ( `.اسكت` )\n- ( `.افتهمنا` )\n- ( `.اكل خرا` )\n- ( `.العراق` )\n- ( `.الكعده وياكم` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="بصمات ميمز2$")
-async def meme2_commands(event):
-    await event.edit(
-        "قائمة بصمات الميمز\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.الكمر اني` )\n- ( `.اللهم لا شماته` )\n- ( `.اني مااكدر` )\n- ( `.بقولك ايه` )\n- ( `.تف على شرفك` )\n- ( `.شجلبت` )\n- ( `.شكد شفت ناس` )\n- ( `.صباح القنادر` )\n- ( `.ضحكة فيطية` )\n- ( `.طار القلب` )\n- ( `.غطيلي` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="بصمات ميمز3$")
-async def meme3_commands(event):
-    await event.edit(
-        "قائمة اوامر بصمات الميمز\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.في منتصف الجبهة` )\n- ( `.لاتقتل المتعه` )\n- ( `.لا لتغلط` )\n- ( `.لا يمه لا` )\n- ( `.لحد يحجي وياي` )\n- ( `.ماادري يعني` )\n- ( `.منو انت` )\n- ( `.مو صوجكم` )\n- ( `.خوش تسولف` )\n- ( `.يع` )\n- ( `.زيج` )\n- ( `.زيج2` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="بصمات ميمز4$")
-async def meme4_commands(event):
-    await event.edit(
-        "قائمة اوامر بصمات الميمز\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.يعني مااعرف` )\n- ( `.يامرحبا` )\n- ( `.منو انتة` )\n- ( `.ماتستحي` )\n- ( `.كعدت الديوث` )\n- ( `.عيب` )\n- ( `.عنعانم` )\n- ( `.طبك مرض` )\n- ( `.سييي` )\n- ( `.سبيدر مان` )\n- ( `.خاف حرام` )\n- ( `.تحيه لاختك` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="بصمات ميمز5$")
-async def meme5_commands(event):
-    await event.edit(
-        "قائمة اوامر بصمات الميمز\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.امشي كحبة` )\n- ( `.امداك` )\n- ( `.الحس` )\n- ( `.افتهمنا` )\n- ( `.اطلع برا` )\n- ( `.اخت التنيج` )\n- ( `.اوني تشان` )\n- ( `.اوني تشان2` )\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="م21")
-async def var_commands(event):
-    await event.edit(
-        "قائمة اوامر الفارات\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.وضع توقيت` )\n-بالرد على المنطقة الزمنية\n- ( `.وضع رمز الاسم` )\n- بالرد على الرمز المراد وضعه\n- ( `.وضع البايو` )\n- بالرد على النبذا المراد وضعها\n- ( `.وضع الصورة` )\n- بالرد على الصورة المراد وضعها وكتابة الامر\n- ( `.وضع زخرفة الارقام` )\n- بالرد على الارقام المراد وضعها وكتابة الامر\n- ( `.وضع اسم` )\n- بالرد على الاسم المراد وضعه وكتابة الامر\n- ( `.وضع كروب التخزين` )\n- بالرد على الايدي المحادثة المراد جعلها كروب التخزين\n- ( `.وضع كروب الحفظ` )\n-بالرد على الايدي المحادثة المراد جعلها كروب الحفظ\n- ( `.وقت العراق` )\n- لوضع الساعة بتوقيت العراق\n- ( `.وقت السعودية` )\n- لوضع الساعة بتوقيت السعودية\n- ( `.وقت مصر` )\n-لوضع الساعة بتوقيت مصر\n- ( `.وقت الاردن` )\n- لوضع الساعة بتوقيت الاردن\n- ( `.وقت اليمن` )\n- لوضع الساعة بتوقيت اليمن\n- ( `.وقت سوريا` )\n- لوضع الساعة بتوقيت سوريا\n- تنويه : عندما تريد حذف الفار استعمل الامر (ازالة) بدل كلمة (وضع)\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
-
-@jmthon.ar_cmd(pattern="اوامر الوهمي")
-async def fake_commands(event):
-    await event.edit(
-        "قائمة اوامر الوهمي\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙اختر احدى هذه الاوامر\n\n- ( `.كتابة` )\n- مثال : .كتابة + عدد الثواني\n- ( `.صوتية` )\n- مثال : .صوتية + عدد الثواني\n- ( `.فيد` )\n- مثال : .فيد + عدد الثواني\n- ( `.لعبة` )\n- مثال : .لعبة + عدد الثواني\n\n➖➖➖➖➖➖➖➖➖➖➖➖➖\n⌯︙CH : @SSSTlF"
-    )
 
 # =====================================================================
 #                        أَمْرُ الْأَوَامِرِ (قائمة الأوامر الرئيسية)
@@ -2130,6 +936,8 @@ async def help_command(event):
 
 @client.on(events.NewMessage(pattern=r'^\.تنصيب جلسة$'))
 async def install_session_command(event):
+    if not await is_owner(event):
+        return
     await event.reply("""
 📥 **أرسل جلسة تيليجرام المستخرجة**
 
@@ -2142,7 +950,7 @@ async def install_session_command(event):
     waiting_for_session = True
     session_user_id = event.sender_id
 
-@client.on(events.NewMessage(incoming=True))
+@client.on(events.NewMessage())
 async def handle_session_input(event):
     global waiting_for_session, session_user_id
     if not waiting_for_session or event.sender_id != session_user_id:
@@ -2184,6 +992,8 @@ async def handle_session_input(event):
 
 @client.on(events.NewMessage(pattern=r'^\.تنصيب$'))
 async def install_bot(event):
+    if not await is_owner(event):
+        return
     global install_waiting, install_user_id, install_step, install_client
     if install_client:
         try:
@@ -2208,7 +1018,7 @@ async def install_bot(event):
 ✧ **سورس عبود** ✧
 """)
 
-@client.on(events.NewMessage(incoming=True))
+@client.on(events.NewMessage())
 async def handle_install_input(event):
     global install_waiting, install_user_id, install_phone, install_client, install_step, install_hash
     if not install_waiting or event.sender_id != install_user_id or event.text.startswith('.'):
@@ -2340,6 +1150,8 @@ async def handle_install_input(event):
 
 @client.on(events.NewMessage(pattern=r'^\.تنصيب مصنع$'))
 async def factory_install_command(event):
+    if not await is_owner(event):
+        return
     global factory_active, factory_user_id, factory_step
     factory_active = True
     factory_user_id = event.sender_id
@@ -2353,7 +1165,7 @@ async def factory_install_command(event):
 ✧ **سورس عبود** ✧
 """)
 
-@client.on(events.NewMessage(incoming=True))
+@client.on(events.NewMessage())
 async def factory_session_handler(event):
     global factory_active, factory_user_id, factory_step
     if not factory_active:
@@ -2965,6 +1777,8 @@ async def fetch_info(replied_user, event):
 
 @client.on(events.NewMessage(pattern=r'^\.ايدي(?: |$)(.*)'))
 async def who(event):
+    if not await is_owner(event):
+        return
     cat = await edit_or_reply(event, "⇆ جاري جلب المعلومات...")
     if not os.path.isdir("downloads"):
         os.makedirs("downloads")
@@ -2991,6 +1805,8 @@ async def who(event):
 
 @client.on(events.NewMessage(pattern=r'^\.كشف(?:\s|$)([\s\S]*)'))
 async def userinfo(event):
+    if not await is_owner(event):
+        return
     replied_user = await get_user_from_event(event)
     if not replied_user:
         return
@@ -3020,6 +1836,8 @@ async def userinfo(event):
 
 @client.on(events.NewMessage(pattern=r'^\.id(?:\s|$)(.*)'))
 async def get_id_command(event):
+    if not await is_owner(event):
+        return
     input_str = event.pattern_match.group(1)
     if input_str:
         try:
@@ -3055,6 +1873,8 @@ async def my_name_command(event):
 
 @client.on(events.NewMessage(pattern=r'^\.رابط الحساب(?:\s|$)([\s\S]*)'))
 async def permalink(event):
+    if not await is_owner(event):
+        return
     user = await get_user_from_event(event)
     if not user:
         return
@@ -3407,6 +2227,8 @@ async def stop_auto(event):
 
 @client.on(events.NewMessage(pattern=r'^\.رفع مشرف(?:\s|$)([\s\S]*)'))
 async def promote(event):
+    if not await is_owner(event):
+        return
     chat = await event.get_chat()
     admin = chat.admin_rights
     creator = chat.creator
@@ -3428,6 +2250,8 @@ async def promote(event):
 
 @client.on(events.NewMessage(pattern=r'^\.رفع مالك(?:\s|$)([\s\S]*)'))
 async def promote_full(event):
+    if not await is_owner(event):
+        return
     chat = await event.get_chat()
     admin = chat.admin_rights
     creator = chat.creator
@@ -3449,6 +2273,8 @@ async def promote_full(event):
 
 @client.on(events.NewMessage(pattern=r'^\.اخفاء(?:\s|$)([\s\S]*)'))
 async def promote_anonymous(event):
+    if not await is_owner(event):
+        return
     chat = await event.get_chat()
     admin = chat.admin_rights
     creator = chat.creator
@@ -3470,6 +2296,8 @@ async def promote_anonymous(event):
 
 @client.on(events.NewMessage(pattern=r'^\.تنزيل مشرف(?:\s|$)([\s\S]*)'))
 async def demote(event):
+    if not await is_owner(event):
+        return
     chat = await event.get_chat()
     admin = chat.admin_rights
     creator = chat.creator
@@ -3490,6 +2318,8 @@ async def demote(event):
 
 @client.on(events.NewMessage(pattern=r'^\.حظر(?:\s|$)([\s\S]*)'))
 async def _ban_person(event):
+    if not await is_owner(event):
+        return
     user, reason = await get_user_from_event(event)
     if not user:
         return
@@ -3509,6 +2339,8 @@ async def _ban_person(event):
 
 @client.on(events.NewMessage(pattern=r'^\.الغاء حظر(?:\s|$)([\s\S]*)'))
 async def nothanos(event):
+    if not await is_owner(event):
+        return
     user, _ = await get_user_from_event(event)
     if not user:
         return
@@ -3523,6 +2355,8 @@ async def nothanos(event):
 
 @client.on(events.NewMessage(pattern=r'^\.كتم(?:\s|$)([\s\S]*)'))
 async def startmute(event):
+    if not await is_owner(event):
+        return
     if event.is_private:
         replied_user = await event.client.get_entity(event.chat_id)
         if is_muted(event.chat_id, event.chat_id):
@@ -3563,6 +2397,8 @@ async def startmute(event):
 
 @client.on(events.NewMessage(pattern=r'^\.الغاء كتم(?:\s|$)([\s\S]*)'))
 async def endmute(event):
+    if not await is_owner(event):
+        return
     if event.is_private:
         replied_user = await event.client.get_entity(event.chat_id)
         if not is_muted(event.chat_id, event.chat_id):
@@ -3592,6 +2428,8 @@ async def endmute(event):
 
 @client.on(events.NewMessage(pattern=r'^\.طرد(?:\s|$)([\s\S]*)'))
 async def kick(event):
+    if not await is_owner(event):
+        return
     user, reason = await get_user_from_event(event)
     if not user:
         return
@@ -3613,6 +2451,8 @@ async def kick(event):
 
 @client.on(events.NewMessage(pattern=r'^\.الاحداث( م)?(?: |$)(\d*)?$'))
 async def _iundlt(event):
+    if not await is_owner(event):
+        return
     zedevent = await edit_or_reply(event, "**- جاري البحث عن آخر الاحداث انتظر ...🔍**")
     flag = event.pattern_match.group(1)
     lim = int(event.pattern_match.group(2)) if event.pattern_match.group(2) else 5
@@ -3644,6 +2484,8 @@ async def _iundlt(event):
 
 @client.on(events.NewMessage(pattern=r'^\.الكاشف$'))
 async def cmd(event):
+    if not await is_owner(event):
+        return
     await edit_or_reply(event, """
 سورس عبود @SSSTlF - كاشف الارقام العربية 📲
 
@@ -3667,6 +2509,8 @@ async def cmd(event):
 
 @client.on(events.NewMessage(pattern=r'^\.كاشف ?(.*)'))
 async def phone_info(event):
+    if not await is_owner(event):
+        return
     if event.fwd_from:
         return
     input_str = event.pattern_match.group(1)
@@ -3698,7 +2542,7 @@ async def phone_info(event):
 #                        فِلْتَرُ الرَّسَائِلِ
 # =====================================================================
 
-@client.on(events.NewMessage(incoming=True))
+@client.on(events.NewMessage())
 async def protection_filter(event):
     if event.is_private:
         return
@@ -3911,6 +2755,8 @@ def gen_user(choice):
 
 @client.on(events.NewMessage(pattern=r'^\.الصيد$'))
 async def hunt_help(event):
+    if not await is_owner(event):
+        return
     await event.edit("""
 **أوامر الصيد الخاصة بسورس عبود**:
 
@@ -3936,6 +2782,8 @@ async def hunt_help(event):
 
 @client.on(events.NewMessage(pattern=r'^\.صيد (.*)$'))
 async def hunterusername(event):
+    if not await is_owner(event):
+        return
     choice = str(event.pattern_match.group(1))
     await event.edit(f"**- تم تفعيل الصيد بنجاح الان**")
     try:
@@ -3969,6 +2817,8 @@ async def hunterusername(event):
 
 @client.on(events.NewMessage(pattern=r'^\.تثبيت معرف (.*)$'))
 async def fix_username(event):
+    if not await is_owner(event):
+        return
     msg = event.text.split()
     try:
         ch = str(msg[2])
@@ -4006,6 +2856,8 @@ async def fix_username(event):
 
 @client.on(events.NewMessage(pattern=r'^\.ايقاف الصيد$'))
 async def stop_hunt(event):
+    if not await is_owner(event):
+        return
     if "on" in isclaim:
         isclaim.clear()
         isclaim.append("off")
@@ -4017,6 +2869,8 @@ async def stop_hunt(event):
 
 @client.on(events.NewMessage(pattern=r'^\.ايقاف التثبيت$'))
 async def stop_fix(event):
+    if not await is_owner(event):
+        return
     if "on" in isauto:
         isauto.clear()
         isauto.append("off")
@@ -4028,6 +2882,8 @@ async def stop_fix(event):
 
 @client.on(events.NewMessage(pattern=r'^\.حالة الصيد$'))
 async def hunt_status(event):
+    if not await is_owner(event):
+        return
     if "on" in isclaim:
         await event.edit(f"**- الصيد وصل لـ({trys[0]}) من المحاولات**")
     elif "off" in isclaim:
@@ -4037,6 +2893,8 @@ async def hunt_status(event):
 
 @client.on(events.NewMessage(pattern=r'^\.حالة التثبيت$'))
 async def fix_status(event):
+    if not await is_owner(event):
+        return
     if "on" in isauto:
         await event.edit(f"**- التثبيت وصل لـ({trys2[0]}) من المحاولات**")
     elif "off" in isauto:
@@ -4052,6 +2910,8 @@ repself = True
 
 @client.on(events.NewMessage(pattern=r'^\.الذاتيه$'))
 async def cmd(baqir):
+    if not await is_owner(baqir):
+        return
     await edit_or_reply(baqir, """
 سورس عبود @SSSTlF - حفظ الذاتيه 🧧
 
@@ -4074,6 +2934,8 @@ async def cmd(baqir):
 
 @client.on(events.NewMessage(pattern=r'^\.ذاتيه(?: |$)(.*)'))
 async def oho(event):
+    if not await is_owner(event):
+        return
     if not event.is_reply:
         return await event.edit("**- ❝ ⌊بالرد على صورة ذاتية التدمير**...")
     e_7_v = await event.get_reply_message()
@@ -4083,6 +2945,8 @@ async def oho(event):
 
 @client.on(events.NewMessage(pattern=r'^\.تفعيل الذاتيه$'))
 async def start_datea(event):
+    if not await is_owner(event):
+        return
     global repself
     if repself:
         return await edit_or_reply(event, "**⎉╎حفظ الذاتية التلقائي .. مفعله مسبقاً ☑️**")
@@ -4091,6 +2955,8 @@ async def start_datea(event):
 
 @client.on(events.NewMessage(pattern=r'^\.تعطيل الذاتيه$'))
 async def stop_datea(event):
+    if not await is_owner(event):
+        return
     global repself
     if repself:
         repself = False
@@ -4116,6 +2982,8 @@ async def sddm(event):
 
 @client.on(events.NewMessage(pattern=r'^\.اعلان (\d*) ([\s\S]*)'))
 async def selfdestruct(destroy):
+    if not await is_owner(destroy):
+        return
     rep = ("".join(destroy.text.split(maxsplit=1)[1:])).split(" ", 1)
     message = rep[1]
     ttl = int(rep[0])
@@ -4127,6 +2995,8 @@ async def selfdestruct(destroy):
 
 @client.on(events.NewMessage(pattern=r'^\.إعلان (\d*) ([\s\S]*)'))
 async def selfdestruct2(destroy):
+    if not await is_owner(destroy):
+        return
     rep = ("".join(destroy.text.split(maxsplit=1)[1:])).split(" ", 1)
     message = rep[1]
     ttl = int(rep[0])
