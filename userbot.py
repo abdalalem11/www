@@ -365,6 +365,10 @@ install_step = "phone"
 install_hash = None
 install_password = None
 
+# ========== متغيرات التنصيب بالجلسة ==========
+waiting_for_session = False
+session_user_id = None
+
 # ========== متغيرات الوقتية ==========
 digitalpic_running = False
 autoname_running = False
@@ -396,11 +400,24 @@ MUTE_RIGHTS = ChatBannedRights(until_date=None, send_messages=True)
 UNMUTE_RIGHTS = ChatBannedRights(until_date=None, send_messages=False)
 
 # ========== إنشاء عميل ==========
-# ========== إنشاء عميل ==========
 if SESSION:
+    print("✅ جاري استخدام الجلسة المخزنة...")
     client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
 else:
+    print("❌ لا توجد جلسة! استخدم أمر التنصيب.")
     client = TelegramClient(StringSession(), API_ID, API_HASH)
+
+# ========== التحقق من الجلسة عند بدء التشغيل ==========
+async def start_client():
+    try:
+        await client.start()
+        me = await client.get_me()
+        print(f"✅ البوت يعمل كـ: {me.first_name} (ID: {me.id})")
+        return True
+    except Exception as e:
+        print(f"❌ خطأ في الجلسة: {e}")
+        print("📌 استخدم أمر .تنصيب جلسة لإرسال جلسة جديدة")
+        return False
 
 # ========== دوال مساعدة ==========
 def get_saudi_time():
@@ -732,7 +749,6 @@ async def show_commands(event):
 """
     await event.reply(commands_text)
 
-
 @client.on(events.NewMessage(pattern=r'^\.مساعده$'))
 async def help_command(event):
     if not await is_owner(event):
@@ -774,34 +790,33 @@ async def help_command(event):
     await event.reply(help_text)
 
 # ================================================================
-#                   أمر التنصيب بالجلسة (Install Session) - التلقائي
+#                   أمر التنصيب بالجلسة (Install Session)
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.تنصيب جلسة$'))
-async def auto_install_session(event):
+async def install_session_command(event):
     if not await is_owner(event):
         await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
         return
     
     await event.reply("""
-📥 **تنصيب تلقائي بالجلسة**
+📥 **أرسل جلسة تيليجرام المستخرجة**
 
-📌 أرسل جلسة تيليجرام المستخرجة في رسالة جديدة
-⚠️ الجلسة تبدأ بـ `1` أو `2` وتكون طويلة
+📌 اكتب الجلسة في رسالة جديدة
+⚠️ تأكد من نسخها كاملة
 
 ✧ **سورس عبود** ✧
 """)
     
-    global install_waiting, install_user_id, install_step
-    install_waiting = True
-    install_user_id = event.sender_id
-    install_step = "auto_session"
+    global waiting_for_session, session_user_id
+    waiting_for_session = True
+    session_user_id = event.sender_id
 
 @client.on(events.NewMessage(incoming=True))
-async def handle_auto_session_input(event):
-    global install_waiting, install_user_id, install_step
+async def handle_session_input(event):
+    global waiting_for_session, session_user_id
     
-    if not install_waiting or event.sender_id != install_user_id or install_step != "auto_session":
+    if not waiting_for_session or event.sender_id != session_user_id:
         return
     
     if event.text.startswith('.'):
@@ -809,13 +824,12 @@ async def handle_auto_session_input(event):
     
     session_str = event.text.strip()
     
-    if not session_str or len(session_str) < 20:
+    if len(session_str) < 20:
         await event.reply("❌ الجلسة غير صالحة! تأكد من نسخها كاملة")
-        install_waiting = False
-        install_step = "phone"
+        waiting_for_session = False
         return
     
-    # محاولة الاتصال بالجلسة
+    # التحقق من الجلسة
     try:
         temp_client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
         await temp_client.connect()
@@ -823,36 +837,32 @@ async def handle_auto_session_input(event):
         await temp_client.disconnect()
     except Exception as e:
         await event.reply(f"❌ الجلسة غير صالحة: {str(e)}")
-        install_waiting = False
-        install_step = "phone"
+        waiting_for_session = False
         return
     
-    # حفظ الجلسة في الإعدادات
+    # حفظ الجلسة
     CONFIG["session_string"] = session_str
     save_config()
     os.environ["SESSION_STRING"] = session_str
     
     await event.reply(f"""
-✅ **تم التنصيب التلقائي بنجاح!**
+✅ **تم التنصيب بنجاح!**
 
-📋 المعرف: `{me.id}`
-📛 الاسم: {me.first_name}
-🆔 اليوزر: @{me.username if me.username else 'لا يوجد'}
-
-🔄 جاري إعادة التشغيل مع الجلسة الجديدة...
+👤 الحساب: {me.first_name}
+🆔 الايدي: `{me.id}`
+🔄 جاري إعادة التشغيل...
 
 ✧ **سورس عبود** ✧
 """)
     
-    install_waiting = False
-    install_step = "phone"
+    waiting_for_session = False
     
     # إعادة تشغيل البوت
     try:
         subprocess.Popen([sys.executable, __file__])
         sys.exit(0)
     except:
-        await event.reply("⚠️ تعذر إعادة التشغيل، أعد تشغيل البوت يدوياً")
+        await event.reply("⚠️ أعد تشغيل البوت يدوياً")
 
 # ================================================================
 #                   أمر التنصيب العادي (Install)
@@ -1739,9 +1749,7 @@ async def my_info(event):
 
 📅 التاريخ : {date_str}
 📍 المنطقة : السعودية - الرياض
-👨‍💻 المطور : @SSSTlF
-
-✧ **سورس عبود** ✧"""
+👨‍💻 المطور : @SSSTlF✧ **سورس عبود** ✧"""
         photos = await client.get_profile_photos(me)
         if photos:
             await event.reply(text, file=photos[0])
@@ -3173,9 +3181,13 @@ async def main():
         print("🚀 جاري تشغيل البوت...")
         print("✧ سورس عبود ✧ @SSSTlF")
         
-        await client.start()
-        me = await client.get_me()
-        print(f"✅ البوت يعمل الآن كـ: {me.first_name} (ID: {me.id})")
+        # بدء التشغيل بالجلسة
+        if not await start_client():
+            print("⏳ انتظر إرسال الجلسة...")
+            await client.run_until_disconnected()
+            return
+        
+        print(f"✅ البوت يعمل الآن كـ: {(await client.get_me()).first_name}")
         print(f"📁 ملف الإعدادات: {CONFIG_FILE}")
         
         # تشغيل حلقة keep_alive في الخلفية
