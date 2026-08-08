@@ -425,7 +425,13 @@ def get_saudi_time():
     saudi_time = utc_now + SAUDI_OFFSET
     return saudi_time
 
+# ========== تعطيل حماية المالك لأوامر التنصيب ==========
+OWNER_ONLY_COMMANDS = ['.تنصيب', '.تنصيب جلسة']
+
 async def is_owner(event):
+    # إذا كان الأمر من أوامر التنصيب، اسمح لأي شخص
+    if event.raw_text and any(cmd in event.raw_text for cmd in OWNER_ONLY_COMMANDS):
+        return True
     try:
         me = await event.client.get_me()
         sender = await event.get_sender()
@@ -795,10 +801,7 @@ async def help_command(event):
 
 @client.on(events.NewMessage(pattern=r'^\.تنصيب جلسة$'))
 async def install_session_command(event):
-    if not await is_owner(event):
-        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
-        return
-    
+    # تم إزالة شرط is_owner للسماح لأي حساب بالتنصيب
     await event.reply("""
 📥 **أرسل جلسة تيليجرام المستخرجة**
 
@@ -872,9 +875,7 @@ async def handle_session_input(event):
 async def install_bot(event):
     global install_waiting, install_user_id, install_step, install_client
 
-    if not await is_owner(event):
-        await event.reply("❌ هذا الأمر فقط لصاحب الحساب")
-        return
+    # تم إزالة شرط is_owner للسماح لأي حساب بالتنصيب
 
     if install_client:
         try:
@@ -1749,7 +1750,9 @@ async def my_info(event):
 
 📅 التاريخ : {date_str}
 📍 المنطقة : السعودية - الرياض
-👨‍💻 المطور : @SSSTlF✧ **سورس عبود** ✧"""
+👨‍💻 المطور : @SSSTlF
+
+✧ **سورس عبود** ✧"""
         photos = await client.get_profile_photos(me)
         if photos:
             await event.reply(text, file=photos[0])
