@@ -370,10 +370,9 @@ waiting_for_session = False
 session_user_id = None
 
 # ========== متغيرات التنصيب المصنع (Factory Install) ==========
-factory_install_waiting = False
-factory_install_user_id = None
-factory_install_session = None
-factory_install_client = None
+factory_active = False
+factory_user_id = None
+factory_step = "waiting"
 
 # ========== متغيرات الوقتية ==========
 digitalpic_running = False
@@ -1070,13 +1069,18 @@ async def handle_install_input(event):
             install_client = None
 
 # ================================================================
-#                   أمر التنصيب المصنع (Factory Install)
+#                   أمر التنصيب المصنع (Factory Install) - النسخة المعدلة
 # ================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.تنصيب مصنع$'))
 async def factory_install_command(event):
     """أمر تنصيب حساب جديد كنسخة من السورس"""
-    # تم إزالة شرط is_owner للسماح لأي حساب بالتنصيب
+    global factory_active, factory_user_id, factory_step
+    
+    factory_active = True
+    factory_user_id = event.sender_id
+    factory_step = "waiting"
+    
     await event.reply("""
 🏭 **مصنع تنصيب الحسابات**
 
@@ -1085,104 +1089,128 @@ async def factory_install_command(event):
 
 ✧ **سورس عبود** ✧
 """)
-    
-    global factory_install_waiting, factory_install_user_id
-    factory_install_waiting = True
-    factory_install_user_id = event.sender_id
 
 @client.on(events.NewMessage(incoming=True))
-async def handle_factory_session_input(event):
-    global factory_install_waiting, factory_install_user_id, factory_install_session, factory_install_client
+async def factory_session_handler(event):
+    """معالج استقبال جلسة التنصيب المصنع"""
+    global factory_active, factory_user_id, factory_step
     
-    if not factory_install_waiting or event.sender_id != factory_install_user_id:
+    # التأكد من أن المصنع مفعل ومن نفس المستخدم
+    if not factory_active:
         return
     
+    if event.sender_id != factory_user_id:
+        return
+    
+    # تجاهل الأوامر
     if event.text.startswith('.'):
+        return
+    
+    # التأكد من أننا في مرحلة الانتظار
+    if factory_step != "waiting":
         return
     
     session_str = event.text.strip()
     
+    # تأكيد استقبال الجلسة فوراً
+    await event.reply("📥 **جاري استقبال الجلسة...**")
+    
+    # التحقق من طول الجلسة
     if len(session_str) < 20:
-        await event.reply("❌ الجلسة غير صالحة! تأكد من نسخها كاملة")
-        factory_install_waiting = False
+        await event.reply("❌ الجلسة غير صالحة! تأكد من نسخها كاملة (أقل من 20 حرف)")
+        factory_active = False
         return
     
-    # التحقق من الجلسة
+    factory_step = "processing"
+    
+    # التحقق من صحة الجلسة
     try:
+        await event.reply("🔄 **جاري التحقق من صحة الجلسة...**")
+        
         temp_client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
         await temp_client.connect()
         me = await temp_client.get_me()
         await temp_client.disconnect()
+        
+        await event.reply(f"✅ **الجلسة صالحة!**\n👤 الحساب: {me.first_name}\n🆔 الايدي: `{me.id}`")
+        
     except Exception as e:
-        await event.reply(f"❌ الجلسة غير صالحة: {str(e)}")
-        factory_install_waiting = False
+        await event.reply(f"❌ **الجلسة غير صالحة:**\n{str(e)}")
+        factory_active = False
         return
     
-    # حفظ الجلسة في ملف منفصل للحساب الجديد
-    account_name = f"account_{me.id}"
-    account_config = CONFIG.copy()
-    account_config["session_string"] = session_str
+    # حفظ الجلسة
+    account_id = me.id
+    source_file = f"sorcer_{account_id}.py"
+    runner_file = f"run_{account_id}.py"
     
-    account_file = f"config_{me.id}.json"
     try:
-        with open(account_file, 'w', encoding='utf-8') as f:
-            json.dump(account_config, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        await event.reply(f"❌ خطأ في حفظ الجلسة: {str(e)}")
-        factory_install_waiting = False
-        return
-    
-    # إنشاء ملف تشغيل للحساب الجديد
-    runner_script = f'''# -*- coding: utf-8 -*-
+        await event.reply("📝 **جاري إنشاء ملفات الحساب الجديد...**")
+        
+        # قراءة السورس الأصلي
+        with open(__file__, 'r', encoding='utf-8') as f:
+            source_code = f.read()
+        
+        # تعديل السورس لاستخدام الجلسة الجديدة
+        modified_code = source_code.replace(
+            'SESSION = os.environ.get("SESSION_STRING", CONFIG.get("session_string", ""))',
+            f'SESSION = "{session_str}"'
+        )
+        
+        # حفظ السورس المعدل
+        with open(source_file, 'w', encoding='utf-8') as f:
+            f.write(modified_code)
+        
+        # إنشاء ملف تشغيل
+        runner_script = f'''# -*- coding: utf-8 -*-
 import os
 import sys
-import asyncio
-import json
+import subprocess
 
-# تحميل إعدادات الحساب
-with open('{account_file}', 'r', encoding='utf-8') as f:
-    config = json.load(f)
-
-os.environ["API_ID"] = str(config.get("api_id", 2040))
-os.environ["API_HASH"] = config.get("api_hash", "b18441a1ff607e10a989891a5462e627")
-os.environ["SESSION_STRING"] = config.get("session_string", "")
-
-# تشغيل السورس
 if __name__ == "__main__":
-    exec(open(__file__.replace('_runner.py', '.py')).read())
-'''
-    
-    runner_file = f"run_{me.id}.py"
+    print("🚀 جاري تشغيل الحساب الجديد...")
     try:
+        subprocess.Popen([sys.executable, "{source_file}"])
+        print("✅ تم تشغيل الحساب بنجاح!")
+    except Exception as e:
+        print(f"❌ خطأ في التشغيل: {{e}}")
+'''
+        
         with open(runner_file, 'w', encoding='utf-8') as f:
             f.write(runner_script)
+        
     except Exception as e:
-        await event.reply(f"❌ خطأ في إنشاء ملف التشغيل: {str(e)}")
-        factory_install_waiting = False
+        await event.reply(f"❌ **خطأ في إنشاء الملفات:**\n{str(e)}")
+        factory_active = False
         return
     
+    # رسالة النجاح
     await event.reply(f"""
 ✅ **تم تنصيب الحساب بنجاح!**
 
-👤 الحساب: {me.first_name}
-🆔 الايدي: `{me.id}`
-📁 ملف الجلسة: `{account_file}`
-🚀 ملف التشغيل: `{runner_file}`
+━━━━━━━━━━━━━━━━
+👤 **الحساب:** {me.first_name}
+🆔 **الايدي:** `{account_id}`
+📁 **ملف السورس:** `{source_file}`
+🚀 **ملف التشغيل:** `{runner_file}`
+━━━━━━━━━━━━━━━━
 
-🔄 لتشغيل الحساب استخدم:
+🔄 **لتشغيل الحساب استخدم:**
 `python {runner_file}`
 
 ✧ **سورس عبود** ✧
 """)
     
-    factory_install_waiting = False
-    
     # محاولة تشغيل الحساب الجديد
     try:
         subprocess.Popen([sys.executable, runner_file])
-        await event.reply("✅ تم تشغيل الحساب الجديد بنجاح!")
+        await event.reply("✅ **تم تشغيل الحساب الجديد بنجاح!**")
     except Exception as e:
-        await event.reply(f"⚠️ تم التنصيب لكن فشل التشغيل التلقائي: {str(e)}")
+        await event.reply(f"⚠️ **تم التنصيب لكن فشل التشغيل التلقائي:**\n{str(e)}")
+    
+    # إعادة تعيين المصنع
+    factory_active = False
+    factory_step = "done"
 
 # ================================================================
 #                   أوامر التحميل (Download Commands)
