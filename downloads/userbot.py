@@ -3521,7 +3521,7 @@ async def archive_cmd(event):
         await event.reply("**⎆ من الآن سيتم نقل المستخدم الغير مسموح له إلى الأرشيف**")
     elif x == "ايقاف":
         addgvar("MOVE_ARCHIVE", "False")
-        await event.reply("**⎆ من الآن سيتم إلغاء النقل عن المستخدم الغير المسموح له إلى الأرشيف**")
+        await event.reply("**⎆ من الآن سيتم إلغاء النقل عن المستخدم الغير مسموح له إلى الأرشيف**")
     elif x == "مسح":
         try:
             await client.edit_folder(unpack=1)
