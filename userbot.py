@@ -841,62 +841,65 @@ async def amireallyalive(event):
         await edit_or_reply(event, caption)
 
 # =====================================================================
-#                        أَمْرُ الْأَوَامِرِ
+#                        أَمْرُ الْأَوَامِرِ - النسخة المعدلة
 # =====================================================================
 
 @client.on(events.NewMessage(pattern=r'^\.الاوامر$'))
 async def show_commands(event):
-    if not await is_owner(event):
-        return
-    
-    buttons = [
-        [Button.inline("📋 م1 - الإدارة والكروبات", b"cmd_m1")],
-        [Button.inline("🎮 م2 - الألعاب والترفيه", b"cmd_m2")],
-        [Button.inline("⚙️ م3 - الأساسية والإعدادات", b"cmd_m3")],
-        [Button.inline("🔧 م4 - المتقدمة والإعدادات", b"cmd_m4")],
-        [Button.inline("⏰ م5 - الوقتية والمزامنة", b"cmd_m5")],
-        [Button.inline("💥 م6 - الإضافة والتفليش", b"cmd_m6")],
-        [Button.inline("🤖 م7 - الذكاء الاصطناعي", b"cmd_m7")],
-        [Button.inline("📦 م8 - التخزين والأرشفة", b"cmd_m8")],
-        [Button.inline("📤 م9 - تحويل ورفع الملفات", b"cmd_m9")],
-        [Button.inline("🎭 م10 - انتحال الهويات", b"cmd_m10")],
-        [Button.inline("🤫 م11 - الهمسات والرسائل السرية", b"cmd_m11")],
-        [Button.inline("📱 م12 - ربط الواتساب", b"cmd_m12")],
-        [Button.inline("🕌 م13 - أوقات الصلاة والأذكار", b"cmd_m13")],
-        [Button.inline("📅 م14 - النشر التلقائي والجدولة", b"cmd_m14")],
-        [Button.inline("👑 م15 - المطور الخاصة", b"cmd_m15")],
-        [Button.inline("📁 م16 - إنشاء ومغادرة المجموعات", b"cmd_m16")],
-        [Button.inline("🎙️ م17 - البث الصوتي والأذكار", b"cmd_m17")],
-        [Button.inline("🔊 م18 - تحويل النص إلى صوت", b"cmd_m18")],
-        [Button.inline("📌 م19 - إضافية متنوعة", b"cmd_m19")],
-        [Button.inline("🎤 م20 - البصمات الصوتية", b"cmd_m20")],
-        [Button.inline("🔄 م21 - الأفتارات", b"cmd_m21")],
-        [Button.inline("💀 م22 - أدوات التهكير المزحي", b"cmd_m22")],
-        [Button.inline("📢 م23 - التاغ والمنشن الجماعي", b"cmd_m23")],
-        [Button.inline("💾 م24 - حفظ الذاتية والإعدادات", b"cmd_m24")],
-        [Button.inline("😂 م25 - رفع ترفيهي ومضحك", b"cmd_m25")],
-        [Button.inline("🔗 م26 - الاشتراك الإجباري للقنوات", b"cmd_m26")],
-        [Button.inline("🎯 م27 - صيد اليوزرات والمعرفات", b"cmd_m27")],
-        [Button.inline("📝 م28 - تخصيص الكليشات والقوالب", b"cmd_m28")],
-        [Button.inline("🛡️ م29 - حماية الرسائل الخاصة", b"cmd_m29")],
-        [Button.inline("📸 م30 - تحميل الاستوريات", b"cmd_m30")],
-        [Button.inline("✏️ م31 - الخطوط والأنماط التلقائية", b"cmd_m31")],
-        [Button.inline("💰 م32 - البنك وتجميع النقاط", b"cmd_m32")],
-        [Button.inline("🎭 م33 - الحالات الوهمية والمزيفة", b"cmd_m33")],
-        [Button.inline("📧 م34 - البريد الإلكتروني المؤقت", b"cmd_m34")],
-        [Button.inline("👁️ م35 - مراقبة الأشخاص والتتبع", b"cmd_m35")],
-        [Button.inline("🎉 م36 - التسليية الإضافية", b"cmd_m36")],
-        [Button.inline("📋 م37 - التعيينات", b"cmd_m37")],
-        [Button.inline("🤝 م38 - بوت التواصل والدعم", b"cmd_m38")],
-        [Button.inline("🕌 م39 - المناسبات الدينية", b"cmd_m39")],
-        [Button.inline("📢 م40 - البلاغات", b"cmd_m40")],
-        [Button.inline("📱 م41 - تحديثات شاومي", b"cmd_m41")],
-        [Button.inline("⭐ م42 - هدايا تليجرام (النجوم)", b"cmd_m42")],
-        [Button.inline("🏆 م43 - المسابقات", b"cmd_m43")],
-    ]
-    
-    me = await client.get_me()
-    msg = f"""
+    try:
+        if not await is_owner(event):
+            return
+        
+        me = await client.get_me()
+        
+        # قائمة الأزرار
+        buttons = [
+            [Button.inline("📋 م1 - الإدارة والكروبات", b"cmd_m1")],
+            [Button.inline("🎮 م2 - الألعاب والترفيه", b"cmd_m2")],
+            [Button.inline("⚙️ م3 - الأساسية والإعدادات", b"cmd_m3")],
+            [Button.inline("🔧 م4 - المتقدمة والإعدادات", b"cmd_m4")],
+            [Button.inline("⏰ م5 - الوقتية والمزامنة", b"cmd_m5")],
+            [Button.inline("💥 م6 - الإضافة والتفليش", b"cmd_m6")],
+            [Button.inline("🤖 م7 - الذكاء الاصطناعي", b"cmd_m7")],
+            [Button.inline("📦 م8 - التخزين والأرشفة", b"cmd_m8")],
+            [Button.inline("📤 م9 - تحويل ورفع الملفات", b"cmd_m9")],
+            [Button.inline("🎭 م10 - انتحال الهويات", b"cmd_m10")],
+            [Button.inline("🤫 م11 - الهمسات والرسائل السرية", b"cmd_m11")],
+            [Button.inline("📱 م12 - ربط الواتساب", b"cmd_m12")],
+            [Button.inline("🕌 م13 - أوقات الصلاة والأذكار", b"cmd_m13")],
+            [Button.inline("📅 م14 - النشر التلقائي والجدولة", b"cmd_m14")],
+            [Button.inline("👑 م15 - المطور الخاصة", b"cmd_m15")],
+            [Button.inline("📁 م16 - إنشاء ومغادرة المجموعات", b"cmd_m16")],
+            [Button.inline("🎙️ م17 - البث الصوتي والأذكار", b"cmd_m17")],
+            [Button.inline("🔊 م18 - تحويل النص إلى صوت", b"cmd_m18")],
+            [Button.inline("📌 م19 - إضافية متنوعة", b"cmd_m19")],
+            [Button.inline("🎤 م20 - البصمات الصوتية", b"cmd_m20")],
+            [Button.inline("🔄 م21 - الأفتارات", b"cmd_m21")],
+            [Button.inline("💀 م22 - أدوات التهكير المزحي", b"cmd_m22")],
+            [Button.inline("📢 م23 - التاغ والمنشن الجماعي", b"cmd_m23")],
+            [Button.inline("💾 م24 - حفظ الذاتية والإعدادات", b"cmd_m24")],
+            [Button.inline("😂 م25 - رفع ترفيهي ومضحك", b"cmd_m25")],
+            [Button.inline("🔗 م26 - الاشتراك الإجباري للقنوات", b"cmd_m26")],
+            [Button.inline("🎯 م27 - صيد اليوزرات والمعرفات", b"cmd_m27")],
+            [Button.inline("📝 م28 - تخصيص الكليشات والقوالب", b"cmd_m28")],
+            [Button.inline("🛡️ م29 - حماية الرسائل الخاصة", b"cmd_m29")],
+            [Button.inline("📸 م30 - تحميل الاستوريات", b"cmd_m30")],
+            [Button.inline("✏️ م31 - الخطوط والأنماط التلقائية", b"cmd_m31")],
+            [Button.inline("💰 م32 - البنك وتجميع النقاط", b"cmd_m32")],
+            [Button.inline("🎭 م33 - الحالات الوهمية والمزيفة", b"cmd_m33")],
+            [Button.inline("📧 م34 - البريد الإلكتروني المؤقت", b"cmd_m34")],
+            [Button.inline("👁️ م35 - مراقبة الأشخاص والتتبع", b"cmd_m35")],
+            [Button.inline("🎉 م36 - التسليية الإضافية", b"cmd_m36")],
+            [Button.inline("📋 م37 - التعيينات", b"cmd_m37")],
+            [Button.inline("🤝 م38 - بوت التواصل والدعم", b"cmd_m38")],
+            [Button.inline("🕌 م39 - المناسبات الدينية", b"cmd_m39")],
+            [Button.inline("📢 م40 - البلاغات", b"cmd_m40")],
+            [Button.inline("📱 م41 - تحديثات شاومي", b"cmd_m41")],
+            [Button.inline("⭐ م42 - هدايا تليجرام (النجوم)", b"cmd_m42")],
+            [Button.inline("🏆 م43 - المسابقات", b"cmd_m43")],
+        ]
+        
+        msg = f"""
 - قائمـة الأوامـر 𓆪 سورس عبدالله 
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
 ⎆ مـرحبًــا **{me.first_name}** - اضغـط ع الامـر لـ النسـخ
@@ -905,7 +908,10 @@ async def show_commands(event):
 ⋆┄─┄─┄─┄┄─┄─┄─┄─┄┄⋆
  @SSSTlF
 """
-    await event.reply(msg, buttons=buttons)
+        await event.reply(msg, buttons=buttons)
+        
+    except Exception as e:
+        await event.reply(f"❌ خطأ: {str(e)}")
 
 # =====================================================================
 #                        معالج الأزرار للأوامر
