@@ -27,7 +27,8 @@ from telethon.tl.types import (
     MessageEntityMentionName,
     ChannelParticipantsKicked,
     ChatAdminRights,
-    InputChatPhotoEmpty
+    InputChatPhotoEmpty,
+    User
 )
 from telethon.errors import (
     FloodWaitError, 
@@ -45,7 +46,8 @@ from telethon.errors import (
     YouBlockedUserError,
     MediaEmptyError,
     WebpageCurlFailedError,
-    WebpageMediaEmptyError
+    WebpageMediaEmptyError,
+    MessageNotModifiedError
 )
 from telethon.tl.functions.account import UpdateProfileRequest, GetPrivacyRequest
 from telethon.tl.functions.channels import (
@@ -147,6 +149,7 @@ LOCKS_FILE = "locks.json"
 MUTE_FILE = "mute.json"
 NO_LOG_FILE = "no_log_pms.json"
 GBAN_FILE = "gban.json"
+SUDOS_FILE = "sudos.json"
 
 # ========== تحميل الإعدادات ==========
 def load_config():
@@ -244,6 +247,43 @@ def delgvar(key):
     if key in data:
         del data[key]
         save_globals(data)
+
+# ========== دوال المتحكمين (SUDOS) ==========
+def load_sudos():
+    if os.path.exists(SUDOS_FILE):
+        try:
+            with open(SUDOS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_sudos(data):
+    with open(SUDOS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def is_sudo(user_id):
+    sudos = load_sudos()
+    return user_id in sudos
+
+def add_sudo(user_id):
+    sudos = load_sudos()
+    if user_id not in sudos:
+        sudos.append(user_id)
+        save_sudos(sudos)
+        return True
+    return False
+
+def remove_sudo(user_id):
+    sudos = load_sudos()
+    if user_id in sudos:
+        sudos.remove(user_id)
+        save_sudos(sudos)
+        return True
+    return False
+
+def get_sudos():
+    return load_sudos()
 
 # ========== دوال الأقفال ==========
 def load_locks():
@@ -470,7 +510,7 @@ async def is_owner(event):
     try:
         me = await event.client.get_me()
         sender = await event.get_sender()
-        return sender.id == me.id
+        return sender.id == me.id or is_sudo(sender.id)
     except:
         return False
 
@@ -505,6 +545,15 @@ def mention(user):
     if hasattr(user, 'first_name'):
         return f"[{user.first_name}](tg://user?id={user.id})"
     return f"[مستخدم](tg://user?id={user.id})"
+
+def inline_mention(user, html=False):
+    if hasattr(user, 'first_name'):
+        name = user.first_name
+    else:
+        name = "مستخدم"
+    if html:
+        return f'<a href="tg://user?id={user.id}">{name}</a>'
+    return f"[{name}](tg://user?id={user.id})"
 
 async def get_readable_time(seconds):
     count = 0
@@ -833,6 +882,22 @@ async def show_commands(event):
 .المجموعات - عرض قائمة جميع المجموعات
 .القنوات - عرض قائمة جميع القنوات
 
+👑 أوامر المتحكمين:
+.اضف متحكم <ايدي/رد> - إضافة متحكم يمكنه استخدام أوامرك
+.حذف متحكم <ايدي/رد> - حذف متحكم
+.المتحكمين - عرض قائمة المتحكمين
+
+🛡️ أوامر حماية الخاص:
+.س أو .سماح - السماح للمستخدم بالتواصل معك
+.ر أو .رفض - رفض المستخدم من التواصل معك
+.بلوك - حظر المستخدم من الخاص
+.الغاء البلوك - إلغاء حظر المستخدم
+.الغاء البلوك للكل - إلغاء حظر جميع المحظورين
+.تشغيل الارشفة - أرشفة المحادثات الجديدة
+.ايقاف الارشفة - إيقاف أرشفة المحادثات
+.مسح الارشفة - حذف جميع المحادثات المؤرشفة
+.قائمة المسموحين - عرض قائمة المسموح لهم
+
 📖 أوامر أخرى:
 .مساعده - عرض المساعدة
 .فحص - فحص البوت
@@ -876,6 +941,15 @@ async def help_command(event):
 .حظر - حظر شخص
 .كتم - كتم شخص
 .طرد - طرد شخص
+
+👑 المتحكمين:
+.اضف متحكم - إضافة متحكم
+.المتحكمين - عرض المتحكمين
+
+🛡️ حماية الخاص:
+.س - السماح بالتواصل
+.ر - رفض التواصل
+.بلوك - حظر المستخدم
 
 🔄 التكرار:
 .سبام <عدد> <رسالة> - تكرار إرسال رسالة
@@ -1385,7 +1459,7 @@ async def backup(event):
         return
     await event.reply("🔄 جاري إنشاء نسخ احتياطي...")
     try:
-        files = [CONFIG_FILE, GLOBALS_FILE, LOCKS_FILE, MUTE_FILE, GBAN_FILE, NO_LOG_FILE]
+        files = [CONFIG_FILE, GLOBALS_FILE, LOCKS_FILE, MUTE_FILE, GBAN_FILE, NO_LOG_FILE, SUDOS_FILE]
         backup_dir = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         os.makedirs(backup_dir, exist_ok=True)
         for file in files:
@@ -1397,6 +1471,96 @@ async def backup(event):
         await event.reply(f"✅ تم إنشاء النسخ الاحتياطي في: {backup_dir}")
     except Exception as e:
         await event.reply(f"❌ خطأ: {str(e)}")
+
+# =====================================================================
+#                        أَوَامِرُ الْمُتَحَكِّمِينَ
+# =====================================================================
+
+@client.on(events.NewMessage(pattern=r'^\.اضف متحكم( (.*)|$)', fullsudo=True))
+async def add_sudo_cmd(event):
+    if not await is_owner(event):
+        return
+    inputs = event.pattern_match.group(1).strip()
+    if event.reply_to_msg_id:
+        replied_to = await event.get_reply_message()
+        user_id = replied_to.sender_id
+        try:
+            user = await event.client.get_entity(user_id)
+        except:
+            user = None
+    elif inputs:
+        try:
+            user = await event.client.get_entity(inputs)
+            user_id = user.id
+        except:
+            return await event.reply("❌ المستخدم غير موجود!")
+    elif event.is_private:
+        user = await event.get_chat()
+        user_id = user.id
+    else:
+        return await event.reply("**⎆ يجب عليك الرد على المستخدم أو وضع يوزره لإضافته في المتحكمين**", time=5)
+    
+    if user and isinstance(user, User) and (user.bot or user.verified):
+        return await event.reply("**◙ لا يمكن إضافـة البوتات إلى قائمة المتحكميـن**")
+    
+    name = inline_mention(user) if user else f"`{user_id}`"
+    if user_id == (await event.client.get_me()).id:
+        return await event.reply("**⎆ لا يمكنك إضافـة نفسك إلى قائمة المتحكمين**")
+    if is_sudo(user_id):
+        return await event.reply(f"**⎆ المستخدم: {name}\n◙ في قائمة المتحكمين أصلا**...")
+    
+    add_sudo(user_id)
+    await event.reply(f"**◙ المستخدم: {name}\n◙ تم بنجاح أضافته إلى قائمة المتحكمين**")
+
+@client.on(events.NewMessage(pattern=r'^\.حذف متحكم( (.*)|$)', fullsudo=True))
+async def remove_sudo_cmd(event):
+    if not await is_owner(event):
+        return
+    inputs = event.pattern_match.group(1).strip()
+    if event.reply_to_msg_id:
+        replied_to = await event.get_reply_message()
+        user_id = replied_to.sender_id
+        try:
+            user = await event.client.get_entity(user_id)
+        except:
+            user = None
+    elif inputs:
+        try:
+            user = await event.client.get_entity(inputs)
+            user_id = user.id
+        except:
+            return await event.reply("❌ المستخدم غير موجود!")
+    elif event.is_private:
+        user = await event.get_chat()
+        user_id = user.id
+    else:
+        return await event.reply("**يجب عليك الرد على المستخدم أو وضعه يوزره مع الأمر**", time=5)
+    
+    name = inline_mention(user) if user else f"`{user_id}`"
+    if not is_sudo(user_id):
+        return await event.reply(f"**⎆ المستخدم: {name}\n◙ ليس من ضمن المتحكمين أصـلًا..**...")
+    
+    remove_sudo(user_id)
+    await event.reply(f"**◙ المستخدم: {name}\n◙ تم حذفه من قائمة المتحـكمين**")
+
+@client.on(events.NewMessage(pattern=r'^\.المتحكمين$'))
+async def list_sudo_cmd(event):
+    if not await is_owner(event):
+        return
+    sudos = get_sudos()
+    if not sudos:
+        return await event.reply("**⎆ لا يوجد أي مستخدم مضاف إلى المتحكمين**", time=5)
+    msg = ""
+    for i in sudos:
+        try:
+            user = await event.client.get_entity(i)
+        except:
+            user = None
+        if user:
+            msg += f"◙ {inline_mention(user)} ( `{i}` )\n"
+        else:
+            msg += f"◙ `{i}` :  مستخدم غير صالح\n"
+    await event.reply(f"**◙ قائمة المتحكمين :**\n{msg}", link_preview=False)
 
 # =====================================================================
 #                        أَوَامِرُ الْقَنَوَاتِ وَالْمَجْمُوعَاتِ
@@ -1695,7 +1859,7 @@ async def start_autoname(event):
 
 async def autoname_loop():
     global autoname_running
-    while autoname_running:
+    while autonome_running:
         HM = time.strftime("%I:%M")
         name = f"⏰ {HM}"
         try:
@@ -3118,6 +3282,337 @@ async def phone_info(event):
         else:
             await zzzzl1l.delete()
             await event.client.send_message(event.chat_id, response.message)
+
+# =====================================================================
+#                        أَوَامِرُ حِمَايَةِ الْخَاصِّ
+# =====================================================================
+
+# متغيرات نظام حماية الخاص
+PMPERMIT = []
+PMPIC = gvarstatus("PMPIC")
+LOG_CHAT = gvarstatus("LOG_CHAT")
+PMSETTING = gvarstatus("PMSETTING")
+AUTOAPPROVE = gvarstatus("AUTOAPPROVE")
+PMWARNS = int(gvarstatus("PMWARNS") or 4)
+MOVE_ARCHIVE = gvarstatus("MOVE_ARCHIVE")
+COUNT_PM = {}
+LASTMSG = {}
+WARN_MSGS = {}
+U_WARNS = {}
+_not_approved = {}
+_to_delete = {}
+
+# دوال المساعدة لخاص
+def update_pm(userid, message, warns_given):
+    try:
+        WARN_MSGS.update({userid: message})
+    except KeyError:
+        pass
+    try:
+        U_WARNS.update({userid: warns_given})
+    except KeyError:
+        pass
+
+async def delete_pm_warn_msgs(chat: int):
+    try:
+        await _to_delete[chat].delete()
+    except KeyError:
+        pass
+
+# نص التحذير الافتراضي
+UNAPPROVED_MSG = "**نظام حماية تيبثـون الخاص بـ {ON}!**\n\n{UND}\n\nلديك {warn}/{twarn} تحذيرات"
+if gvarstatus("PM_TEXT"):
+    UNAPPROVED_MSG = (
+        "**نظام حماية تيبثـون الخاص بـ {ON}!**\n\n"
+        + gvarstatus("PM_TEXT")
+        + "\n\nلديك {warn}/{twarn} تحذيرات"
+    )
+
+UND = "**⎆ يجب عليك انتظـار رد مالـك الحسـاب 🧸\n ⎆ وإن قمت بالتكرار سوف أقوم بحظرك**"
+UNS = "**⌔∮  لـقد أخبرتك ألّا تُـكـرر أرسـال الرسـائل\n❃ يبـدو أنـك لا تُحـسن الـقراءة سيتم حظـرك  :)**" 
+NO_REPLY = "**⎆ يجب عليك الرد على المستخدم أو في الخاص.**"
+
+# معالج حماية الخاص
+if PMSETTING:
+    if AUTOAPPROVE:
+        @client.on(events.NewMessage(
+            outgoing=True,
+            func=lambda e: e.is_private and e.out and not e.text.startswith('.'),
+        ))
+        async def autoappr(e):
+            miss = await e.get_chat()
+            if miss.bot or miss.is_self or miss.verified:
+                return
+            if miss.id in PMPERMIT:
+                return
+            PMPERMIT.append(miss.id)
+            await delete_pm_warn_msgs(miss.id)
+            try:
+                await client.edit_folder(miss.id, folder=0)
+            except BaseException:
+                pass
+
+    @client.on(events.NewMessage(
+        incoming=True,
+        func=lambda e: e.is_private
+        and e.sender_id not in [client.uid]
+        and not e.out
+    ))
+    async def permitpm(event):
+        sender = await event.get_sender()
+        if (sender.bot or sender.verified or sender.is_self):
+            return
+        user = event.sender
+        if user.id not in PMPERMIT:
+            if MOVE_ARCHIVE:
+                try:
+                    await client.edit_folder(user.id, folder=1)
+                except BaseException:
+                    pass
+            if event.media:
+                try:
+                    await event.delete()
+                except:
+                    pass
+            name = user.first_name
+            fullname = get_display_name(user)
+            username = f"@{user.username}"
+            mention = inline_mention(user)
+            try:
+                wrn = COUNT_PM[user.id] + 1
+            except:
+                wrn = 1
+            if user.id in LASTMSG:
+                prevmsg = LASTMSG[user.id]
+                if event.text != prevmsg:
+                    if "نظام حماية تيبثون" in event.text or "**نظام حماية تيبثون" in event.text:
+                        return
+                    await delete_pm_warn_msgs(user.id)
+                    message_ = UNAPPROVED_MSG.format(
+                        ON=(await client.get_me()).first_name,
+                        warn=wrn,
+                        twarn=PMWARNS,
+                        UND=UND,
+                        name=name,
+                        fullname=fullname,
+                        username=username,
+                        mention=mention,
+                    )
+                    update_pm(user.id, message_, wrn)
+                    if PMPIC:
+                        _to_delete[user.id] = await client.send_file(
+                            user.id,
+                            PMPIC,
+                            caption=message_,
+                        )
+                    else:
+                        _to_delete[user.id] = await client.send_message(
+                            user.id, message_
+                        )
+                else:
+                    await delete_pm_warn_msgs(user.id)
+                    message_ = UNAPPROVED_MSG.format(
+                        ON=(await client.get_me()).first_name,
+                        warn=wrn,
+                        twarn=PMWARNS,
+                        UND=UND,
+                        name=name,
+                        fullname=fullname,
+                        username=username,
+                        mention=mention,
+                    )
+                    update_pm(user.id, message_, wrn)
+                    if PMPIC:
+                        _to_delete[user.id] = await client.send_file(
+                            user.id,
+                            PMPIC,
+                            caption=message_,
+                        )
+                    else:
+                        _to_delete[user.id] = await client.send_message(
+                            user.id, message_
+                        )
+                LASTMSG.update({user.id: event.text})
+            else:
+                await delete_pm_warn_msgs(user.id)
+                message_ = UNAPPROVED_MSG.format(
+                    ON=(await client.get_me()).first_name,
+                    warn=wrn,
+                    twarn=PMWARNS,
+                    UND=UND,
+                    name=name,
+                    fullname=fullname,
+                    username=username,
+                    mention=mention,
+                )
+                update_pm(user.id, message_, wrn)
+                if PMPIC:
+                    _to_delete[user.id] = await client.send_file(
+                        user.id,
+                        PMPIC,
+                        caption=message_,
+                    )
+                else:
+                    _to_delete[user.id] = await client.send_message(
+                        user.id, message_
+                    )
+                LASTMSG.update({user.id: event.text})
+            if user.id not in COUNT_PM:
+                COUNT_PM.update({user.id: 1})
+            else:
+                COUNT_PM[user.id] = COUNT_PM[user.id] + 1
+            if COUNT_PM[user.id] >= PMWARNS:
+                await delete_pm_warn_msgs(user.id)
+                _to_delete[user.id] = await event.respond(UNS)
+                try:
+                    del COUNT_PM[user.id]
+                    del LASTMSG[user.id]
+                except KeyError:
+                    pass
+                await client(BlockRequest(user.id))
+                #await client(ReportSpamRequest(peer=user.id))
+
+    @client.on(events.NewMessage(pattern=r'^\.(تشغيل|ايقاف|مسح) الارشفة$'))
+    async def archive_cmd(event):
+        if not await is_owner(event):
+            return
+        x = event.pattern_match.group(1).strip()
+        if x == "تشغيل":
+            addgvar("MOVE_ARCHIVE", "True")
+            await event.reply("**⎆ من الآن سيتم نقل المستخدم الغير مسموح له إلى الأرشيف**")
+        elif x == "ايقاف":
+            addgvar("MOVE_ARCHIVE", "False")
+            await event.reply("**⎆ من الآن سيتم إلغاء النقل عن المستخدم الغير المسموح له إلى الأرشيف**")
+        elif x == "مسح":
+            try:
+                await client.edit_folder(unpack=1)
+                await event.reply("**✦ تم إلغاء أرشيـف جميع المحادثات بنجاح ✓**")
+            except Exception as mm:
+                await event.reply(str(mm))
+
+@client.on(events.NewMessage(pattern=r'^\.(س|سماح)(?: |$)', fullsudo=True))
+async def approvepm(event):
+    if not await is_owner(event):
+        return
+    if event.reply_to_msg_id:
+        user = (await event.get_reply_message()).sender
+    elif event.is_private:
+        user = await event.get_chat()
+    else:
+        return await event.reply(NO_REPLY)
+    
+    if user.id in PMPERMIT:
+        return await event.reply("**⎆ هذا المستخدم مسموح بالدردشة معك بالأصـل 🔔**")
+    
+    PMPERMIT.append(user.id)
+    try:
+        await delete_pm_warn_msgs(user.id)
+        await client.edit_folder(user.id, folder=0)
+    except BaseException:
+        pass
+    await event.reply(f"<b>{inline_mention(user, html=True)}</b> <code>تم السماح له بالدردشة معك</code>", parse_mode="html")
+
+@client.on(events.NewMessage(pattern=r'^\.(ر|رفض)(?: |$)', fullsudo=True))
+async def disapprovepm(event):
+    if not await is_owner(event):
+        return
+    if event.reply_to_msg_id:
+        user = (await event.get_reply_message()).sender
+    elif event.is_private:
+        user = await event.get_chat()
+    else:
+        return await event.reply(NO_REPLY)
+    
+    if user.id not in PMPERMIT:
+        return await event.reply(f"<b>{inline_mention(user, html=True)}</b> <code>المستخدم مرفوض بالأصل</code>", parse_mode="html")
+    
+    PMPERMIT.remove(user.id)
+    await event.reply(f"<b>{inline_mention(user, html=True)}</b> <code>تم رفضه من الدردشة معك</code>", parse_mode="html")
+
+@client.on(events.NewMessage(pattern=r'^\.بلوك( (.*)|$)', fullsudo=True))
+async def blockpm(event):
+    if not await is_owner(event):
+        return
+    match = event.pattern_match.group(1).strip()
+    if event.reply_to_msg_id:
+        user_id = (await event.get_reply_message()).sender_id
+    elif match:
+        try:
+            user = await event.client.get_entity(match)
+            user_id = user.id
+        except:
+            return await event.reply("❌ المستخدم غير موجود!")
+    elif event.is_private:
+        user_id = event.chat_id
+    else:
+        return await event.reply(NO_REPLY)
+    
+    try:
+        user = await event.client.get_entity(user_id)
+    except:
+        user = None
+    
+    await event.client(BlockRequest(user_id))
+    if user_id in PMPERMIT:
+        PMPERMIT.remove(user_id)
+    await event.reply(f"**⌔∮ المستخدم: {inline_mention(user) if user else user_id}** [`{user_id}`]\n**❃ تم حظره من الدردشة معك في الخاص**")
+
+@client.on(events.NewMessage(pattern=r'^\.الغاء البلوك( (.*)|$)', fullsudo=True))
+async def unblockpm(event):
+    if not await is_owner(event):
+        return
+    match = event.pattern_match.group(1).strip()
+    reply = await event.get_reply_message()
+    
+    if reply:
+        user_id = reply.sender_id
+    elif match:
+        if match == "للكل":
+            msg = await event.reply("**⎆ جـاري إلغـاء حظر المستخدم من الخاص...**")
+            u_s = await event.client(GetBlockedRequest(0, 0))
+            count = len(u_s.users)
+            if not count:
+                return await msg.edit("**⎆ كـم أنـت حنون 😍، لا يوجد محظورين لفك الحظر عنهم**")
+            for user in u_s.users:
+                await asyncio.sleep(1)
+                await event.client(UnblockRequest(user.id))
+            return await msg.edit(f"**⌔∮ تم بنجاح الغاء حظر {count} من المستخدمين من الخاص**")
+        try:
+            user = await event.client.get_entity(match)
+            user_id = user.id
+        except:
+            return await event.reply("❌ المستخدم غير موجود!")
+    elif event.is_private:
+        user_id = event.chat_id
+    else:
+        return await event.reply(NO_REPLY)
+    
+    try:
+        user = await event.client.get_entity(user_id)
+    except:
+        user = None
+    
+    try:
+        await event.client(UnblockRequest(user_id))
+        await event.reply(f"**⌔∮ المستخدم:{inline_mention(user) if user else user_id}** [`{user_id}`]\n**❃ تم إلغـاء حظره من الخاص بنجاح**")
+    except Exception as et:
+        await event.reply(f"ERROR - {et}")
+
+@client.on(events.NewMessage(pattern=r'^\.قائمة المسموحين$', fullsudo=True))
+async def list_approved(event):
+    if not await is_owner(event):
+        return
+    if not PMPERMIT:
+        return await event.reply("**هممممم، لا يوجد مستخدمين مسموحين لديك 💔**")
+    users = []
+    for i in PMPERMIT:
+        try:
+            name = get_display_name(await client.get_entity(i))
+        except BaseException:
+            name = "غير معروف"
+        users.append(f"• {name} (`{i}`)")
+    text = "**⌔∮ قائمة المستخدمين المسموح لهم بالدردشة:**\n\n" + "\n".join(users)
+    await event.reply(text)
 
 # =====================================================================
 #                        أَوَامِرُ التَّكْرَارِ
